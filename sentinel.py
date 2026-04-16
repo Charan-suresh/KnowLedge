@@ -185,9 +185,43 @@ if st.button("Process Input (Simulate Sentinel Poll)"):
             else:
                 st.info("No concepts extracted. The model didn't identify any clear academic concepts.")
 
+def fetch_all_debts_for_score():
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+        cursor.execute("SELECT status, confidence_score FROM debt_log ORDER BY timestamp ASC")
+        return cursor.fetchall()
+    except:
+        return []
+
 # Sidebar - Debt Dashboard
 st.sidebar.title("📈 Current Debt Dashboard")
 st.sidebar.markdown("Tracking *Comprehension Debt*")
+
+# WOW Feature: Debt Score Visualization
+history = fetch_all_debts_for_score()
+base_score = 850
+score_trend = [base_score]
+current_score = base_score
+
+for status, conf in history:
+    penalty = int(20 * (conf if conf else 0.5)) # Penalize heavily for highly confident stolen concepts
+    if status == 'borrowed':
+        current_score -= penalty
+    elif status == 'cleared':
+        current_score += penalty
+    elif status == 'Persistent Reliance':
+        current_score -= penalty * 3 # Huge penalty for relying on AI without learning
+    
+    # Cap between 300 and 850 standard format
+    current_score = max(300, min(850, current_score))
+    score_trend.append(current_score)
+
+delta = score_trend[-1] - score_trend[-2] if len(score_trend) > 1 else 0
+
+st.sidebar.metric(label="Comprehension Debt Score", value=current_score, delta=delta, delta_color="normal")
+st.sidebar.line_chart(score_trend, height=150)
+st.sidebar.markdown("---")
 
 debts = fetch_borrowed_debts()
 if debts:
@@ -198,7 +232,7 @@ if debts:
         st.sidebar.card = st.sidebar.container()
         with st.sidebar.card:
             st.markdown(f"**{tag}**")
-            st.caption(f"Score: {score:.2f} | Time: {short_time}")
+            st.caption(f"Confidence: {score:.2f} | Logged: {short_time}")
             st.divider()
 else:
-    st.sidebar.info("No borrowed concepts yet.")
+    st.sidebar.info("No concepts currently in debt. Great job!")
