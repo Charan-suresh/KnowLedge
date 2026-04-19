@@ -14,14 +14,16 @@ async def get_reports(request: Request, view: str = "student"):
     integrity_summary = db.get_integrity_summary()
     sync_audit = db.get_sync_audit_log()[:10]
     
-    return request.app.state.templates.TemplateResponse(request, "reports.html", {
+    context = {
+        **request.app.state.base_template_context,
         "view": view,
         "weekly_report": weekly_report,
         "class_report": class_report,
         "concept_time_to_clear": concept_time_to_clear,
         "integrity_summary": integrity_summary,
         "sync_audit": sync_audit,
-    })
+    }
+    return request.app.state.templates.TemplateResponse(request, "reports.html", context)
 
 @router.get("/reports/export")
 async def export_reports(format: str = "csv"):

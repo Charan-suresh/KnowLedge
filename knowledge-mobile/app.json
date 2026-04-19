@@ -4,7 +4,10 @@
     "slug": "knowledge-mobile",
     "scheme": "knowledgemobile",
     "plugins": [
-      "expo-router"
+      "expo-router",
+      "expo-asset",
+      "expo-secure-store",
+      "expo-sqlite"
     ],
     "android": {
       "permissions": [
@@ -24,10 +27,6 @@
         "NSMicrophoneUsageDescription": "Sage uses your microphone for voice responses"
       }
     },
-    "extra": {
-      "eas": {
-        "projectId": "replace-with-your-eas-project-id"
-      }
-    }
+    "extra": {}
   }
 }

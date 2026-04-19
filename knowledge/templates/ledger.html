@@ -108,7 +108,7 @@
 
     <div class="llm-config-body">
       <label class="llm-field-label" for="ollamaHostInput">Ollama Server URL</label>
-      <input id="ollamaHostInput" class="modal-input" type="text" placeholder="http://localhost:11434">
+      <input id="ollamaHostInput" class="modal-input" type="text" placeholder="https://ollama-xxxx.run.app">
 
       <div class="llm-config-row">
         <div>
@@ -264,7 +264,7 @@
   }
 
   function fillLlmForm(configData) {
-    document.getElementById('ollamaHostInput').value = configData.ollama_host || '';
+    document.getElementById('ollamaHostInput').value = configData.ollama_base_url || configData.ollama_host || '';
     document.getElementById('scoutModelInput').value = configData.scout_model || '';
     document.getElementById('sageModelInput').value = configData.sage_model || '';
     document.getElementById('lensModelInput').value = configData.lens_model || '';
@@ -326,13 +326,13 @@
 
   async function saveLlmSettings() {
     const payload = {
-      ollama_host: document.getElementById('ollamaHostInput').value.trim(),
+      ollama_base_url: document.getElementById('ollamaHostInput').value.trim(),
       scout_model: document.getElementById('scoutModelInput').value.trim(),
       sage_model: document.getElementById('sageModelInput').value.trim(),
       lens_model: document.getElementById('lensModelInput').value.trim(),
     };
 
-    if (!payload.ollama_host || !payload.scout_model || !payload.sage_model || !payload.lens_model) {
+    if (!payload.ollama_base_url || !payload.scout_model || !payload.sage_model || !payload.lens_model) {
       showToast('⚠️', 'Missing fields', 'Host and all model fields are required.');
       return;
     }
@@ -368,6 +368,7 @@
     
     document.getElementById('scoutInput').value = '';
     showToast('⚡', 'Scout is analyzing', 'This will take a few seconds...');
+    window.startColdStartTimer();
     
     try {
       await fetch('/api/scout', {
@@ -375,11 +376,13 @@
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({text: val})
       });
+      window.stopColdStartTimer();
       setTimeout(() => {
         showToast('✅', 'Analysis complete', 'Refresh your dashboard in a moment.');
         fetchState();
       }, 5000); 
     } catch(e) {
+      window.stopColdStartTimer();
       showToast('❌', 'Error', 'Failed to tag concepts.');
     }
   }
@@ -445,6 +448,8 @@
   if (saveBtn) {
     saveBtn.addEventListener('click', saveLlmSettings);
   }
+  // Pre-warm Cloud Run on page load - reduces cold start latency for judges.
+  fetch('/api/warmup').catch(() => {});
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && llmModal && llmModal.classList.contains('open')) {
       closeLlmSettingsBtn();

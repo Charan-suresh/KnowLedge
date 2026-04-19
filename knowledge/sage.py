@@ -1,7 +1,7 @@
-import ollama
 from dataclasses import dataclass
 from typing import List, Dict, Any
 from . import config
+from .agents.ollama_client import chat
 
 @dataclass
 class ClearingResult:
@@ -49,9 +49,8 @@ Context:
     }]
 
     try:
-        client = ollama.Client(host=config.OLLAMA_HOST)
-        response = client.chat(
-            model=config.COLLECTOR_MODEL,
+        response = chat(
+            model=config.SAGE_MODEL,
             messages=messages,
             tools=tools
         )
@@ -72,5 +71,5 @@ Context:
         return ClearingResult(cleared=cleared, response=ai_response)
         
     except Exception as e:
-        print(f"Error communicating with local Ollama: {e}")
+        print(f"Error communicating with Ollama API: {e}")
         return ClearingResult(cleared=False, response=f"Error: {e}")

@@ -1,4 +1,3 @@
-import ollama
 import json
 import base64
 from dataclasses import dataclass
@@ -6,6 +5,7 @@ from typing import Optional
 from PIL import Image
 import io
 from . import config
+from .agents.ollama_client import chat
 
 @dataclass
 class ExaminerResult:
@@ -40,9 +40,8 @@ def verify_image(image_bytes: bytes, concept: str) -> ExaminerResult:
         Use approximate pixel coordinates assuming the image is {img.width}x{img.height}.
         """
         
-        client = ollama.Client(host=config.OLLAMA_HOST)
-        response = client.chat(
-            model=config.EXAMINER_MODEL,
+        response = chat(
+            model=config.LENS_MODEL,
             messages=[{
                 'role': 'user', 
                 'content': vision_prompt,

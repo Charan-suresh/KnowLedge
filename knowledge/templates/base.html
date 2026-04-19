@@ -12,6 +12,18 @@
 </head>
 <body>
 
+  {% if is_production and demo_mode %}
+  <div style="background:#D4820A;color:#fff;text-align:center;padding:8px;font-family:'DM Mono',monospace;font-size:12px;letter-spacing:0.06em;">
+    LIVE DEMO - Gemma 4 E4B running on Google Cloud Run GPU - Data resets every 24h -
+    <a href="https://github.com/yourname/knowledge" style="color:#fff;text-decoration:underline;">View source</a>
+  </div>
+  {% endif %}
+
+  <div id="cold-start-banner" style="display:none;background:var(--cream-deep);border:1px solid var(--rule);border-radius:var(--radius);padding:16px 20px;margin:24px 36px;font-family:'DM Mono',monospace;font-size:12px;color:var(--ink-muted);">
+    <span id="cold-start-msg">Waking up Gemma 4 on Cloud Run GPU...</span>
+    <span style="margin-left:8px" id="cold-start-dots">●○○</span>
+  </div>
+
   <!-- Sidebar -->
   <aside class="sidebar">
     <div class="logo-area">
@@ -113,6 +125,32 @@
   <div id="toast-container"></div>
 
   <script>
+    let coldStartTimer = null;
+    let coldStartDotsTimer = null;
+    const coldDots = ['●○○', '○●○', '○○●'];
+    let coldDotIdx = 0;
+
+    window.startColdStartTimer = function() {
+      const banner = document.getElementById('cold-start-banner');
+      if (!banner) return;
+      clearTimeout(coldStartTimer);
+      clearInterval(coldStartDotsTimer);
+      coldStartTimer = setTimeout(() => {
+        banner.style.display = 'block';
+        coldStartDotsTimer = setInterval(() => {
+          const dotsEl = document.getElementById('cold-start-dots');
+          if (dotsEl) dotsEl.textContent = coldDots[coldDotIdx++ % coldDots.length];
+        }, 400);
+      }, 3000);
+    }
+
+    window.stopColdStartTimer = function() {
+      const banner = document.getElementById('cold-start-banner');
+      clearTimeout(coldStartTimer);
+      clearInterval(coldStartDotsTimer);
+      if (banner) banner.style.display = 'none';
+    }
+
     // Shared Global JS
     function showToast(icon, title, sub) {
       const container = document.getElementById('toast-container');
@@ -297,6 +335,7 @@
 
       let fullReply = "";
       let cleared = false;
+      window.startColdStartTimer();
 
       try {
         const es = new EventSource(url);
@@ -312,20 +351,24 @@
           if (data.status === "cleared") {
             cleared = true;
             es.close();
+            window.stopColdStartTimer();
             finishReply(fullReply, cleared);
           } else if (data.status === "complete") {
             es.close();
+            window.stopColdStartTimer();
             finishReply(fullReply, cleared);
           }
         };
 
         es.onerror = () => {
           es.close();
+          window.stopColdStartTimer();
           if (!fullReply) bubble.textContent = "Error connecting to Sage.";
           else finishReply(fullReply, false);
         };
 
       } catch(e) {
+        window.stopColdStartTimer();
         bubble.textContent = "Error connecting to Sage.";
         input.disabled = false;
         document.querySelector('.modal-send').disabled = false;

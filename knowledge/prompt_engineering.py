@@ -1,9 +1,8 @@
 import json
 from typing import List
 
-import ollama
-
 from . import config
+from .agents.ollama_client import chat
 
 
 def generate_solo_question(concept: str, prior_questions: List[str]) -> str:
@@ -19,8 +18,7 @@ Prior questions:
 Return only the question text.
 """
     try:
-        client = ollama.Client(host=config.OLLAMA_HOST)
-        resp = client.chat(
+        resp = chat(
             model=config.SAGE_MODEL,
             messages=[
                 {"role": "system", "content": "You create concise, novel assessment questions."},

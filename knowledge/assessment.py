@@ -1,10 +1,9 @@
 import json
 from typing import Dict, Any
 
-import ollama
-
 from . import config
 from .retrieval import build_context
+from .agents.ollama_client import chat
 
 
 def evaluate_real_learning(concept: str, question: str, response: str) -> Dict[str, Any]:
@@ -22,8 +21,7 @@ Return JSON only with keys:
 - specific_gaps (array of strings)
 """
     try:
-        client = ollama.Client(host=config.OLLAMA_HOST)
-        out = client.chat(
+        out = chat(
             model=config.SAGE_MODEL,
             messages=[{"role": "user", "content": eval_prompt}],
             format="json",

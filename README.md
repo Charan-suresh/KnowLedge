@@ -1,16 +1,16 @@
----
-title: KnowLedge
-emoji: "🦉"
-colorFrom: yellow
-colorTo: blue
-sdk: gradio
-app_file: app.py
-pinned: false
----
+
 
 # KnowLedge
 
 KnowLedge is a local-first learning verification platform built for the Gemma 4 for Good hackathon.
+
+## Live demo
+
+**Try it now -> https://knowledge.onrender.com**
+
+Powered by Gemma 4 E4B on Google Cloud Run GPU.
+Full Sage sessions, Lens camera verification, and real
+comprehension debt tracking - all working in your browser.
 
 It helps students turn borrowed understanding into real mastery. The system tracks concepts that appear in pasted work, guides the learner through Socratic clearing sessions, verifies understanding with multimodal checks, and shares only privacy-preserving aggregates with instructors.
 
@@ -89,6 +89,57 @@ Open these views in a browser:
 - `http://127.0.0.1:8000/progress`
 - `http://127.0.0.1:8000/reports`
 - `http://127.0.0.1:8000/help`
+
+## Deploy your own instance
+
+### Prerequisites
+
+- Google Cloud account with credits
+- Render account (free)
+- GitHub account
+- Google Cloud CLI installed: `brew install google-cloud-sdk`
+
+### Step 1 - Deploy Ollama to Google Cloud Run
+
+```bash
+gcloud auth login
+nano cloud-run/deploy-ollama.sh
+./cloud-run/deploy-ollama.sh
+```
+
+Copy the `OLLAMA_BASE_URL` and `OLLAMA_AUTH_TOKEN` values printed at the end.
+
+### Step 2 - Deploy the web app to Render
+
+1. Fork this repository on GitHub.
+2. Go to render.com and create a new web service from your fork.
+3. Render auto-detects `render.yaml`; click deploy.
+4. In Render environment variables, add:
+	- `OLLAMA_BASE_URL`
+	- `OLLAMA_AUTH_TOKEN`
+5. Trigger a manual deploy.
+
+### Token refresh (important)
+
+Google Cloud identity tokens expire after one hour. Run this before judges evaluate, and again every hour during judging:
+
+```bash
+./cloud-run/refresh-token.sh
+```
+
+For a longer-lived setup, follow service account instructions in `cloud-run/README.md`.
+
+### Render filesystem note
+
+Render free tier uses ephemeral disk. `knowledge.db` and `chroma_store/` are recreated on restarts/deploys. This repo enables `DEMO_MODE=true` by default and seeds realistic demo data automatically on startup.
+
+### Pre-share verification
+
+```bash
+python scripts/verify_deployment.py https://your-app.onrender.com
+```
+
+All checks should pass before sharing with judges.
 
 ### 5. Optional: load curriculum material into ChromaDB
 

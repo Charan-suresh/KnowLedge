@@ -203,8 +203,9 @@ async def oauth_callback(request: Request, code: str = Query(...), state: str = 
 @router.get("/teacher-view", response_class=HTMLResponse)
 async def teacher_view(request: Request):
     """Teacher-side configuration view shown inside Classroom."""
+    context = {**request.app.state.base_template_context}
     return request.app.state.templates.TemplateResponse(
-        request, "teacher_view.html", {}
+        request, "teacher_view.html", context
     )
 
 
@@ -225,15 +226,15 @@ async def student_view(request: Request):
     attachment_id  = request.query_params.get("attachmentId", "")
     submission_id  = request.query_params.get("submissionId", "")
 
-    return request.app.state.templates.TemplateResponse(
-        request, "student_iframe.html", {
+    context = {
+        **request.app.state.base_template_context,
             "student_id":     student_id,
             "course_id":      course_id,
             "coursework_id":  coursework_id,
             "attachment_id":  attachment_id,
             "submission_id":  submission_id,
-        }
-    )
+    }
+    return request.app.state.templates.TemplateResponse(request, "student_iframe.html", context)
 
 
 @router.get("/review", response_class=HTMLResponse)
@@ -241,8 +242,9 @@ async def review_view(request: Request):
     """Teacher review URI — shows the student's clearing history for an assignment."""
     session_id = request.query_params.get("sessionId", "")
     session = db.get_classroom_session(session_id) if session_id else None
+    context = {**request.app.state.base_template_context, "session": session}
     return request.app.state.templates.TemplateResponse(
-        request, "teacher_view.html", {"session": session}
+        request, "teacher_view.html", context
     )
 
 

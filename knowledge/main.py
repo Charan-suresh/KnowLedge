@@ -2,8 +2,11 @@ import json
 import asyncio
 import logging
 import uuid
+import httpx
+import queue
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
+from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Query
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -23,8 +26,38 @@ from .sync.audit_log import get_sync_audit
 from .routers import progress, reports
 from .routers.ingest import router as ingest_router
 from .routers.classroom import router as classroom_router
+from .agents.ollama_client import check_health
+from .integrity.session_fingerprint import generate_device_key_if_missing
 
 logger = logging.getLogger(__name__)
+BASE_DIR = Path(__file__).resolve().parent
+
+
+def _base_context(extra: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {
+        "is_production": config.IS_PRODUCTION,
+        "demo_mode": config.DEMO_MODE,
+    }
+    if extra:
+        payload.update(extra)
+    return payload
+
+
+async def warm_ollama() -> None:
+    """Pull required models on Cloud Run if missing. Safe and idempotent."""
+    models_needed = list({config.SCOUT_MODEL, config.SAGE_MODEL})
+    headers = {"Authorization": f"Bearer {config.OLLAMA_AUTH_TOKEN}"} if config.OLLAMA_AUTH_TOKEN else {}
+
+    for model in models_needed:
+        try:
+            async with httpx.AsyncClient(timeout=600.0) as client:
+                await client.post(
+                    f"{config.OLLAMA_BASE_URL}/api/pull",
+                    json={"name": model},
+                    headers=headers,
+                )
+        except Exception as exc:
+            logger.warning("[warm_ollama] Failed to pull %s: %s", model, exc)
 
 
 async def _periodic_sync_worker():
@@ -68,9 +101,15 @@ async def lifespan(app_instance: FastAPI):
     # ── Startup ──────────────────────────────────────────────────────────────
     db.init_db()
     db.run_migrations()
+    generate_device_key_if_missing()
+    if config.DEMO_MODE:
+        db.seed_demo_data_if_empty()
     config.load_runtime_llm_config(db.get_llm_settings())
+    asyncio.create_task(warm_ollama())
     await _sweep_overdue_sessions()
     app_instance.state.sync_task = asyncio.create_task(_periodic_sync_worker())
+    app_instance.state.orchestrator = orchestrator
+    orchestrator.start_scout_loop()
     yield
     # ── Shutdown (nothing to clean up yet) ───────────────────────────────────
     task = getattr(app_instance.state, "sync_task", None)
@@ -81,9 +120,10 @@ async def lifespan(app_instance: FastAPI):
 app = FastAPI(title="KnowLedge Backend", lifespan=lifespan)
 
 # Mount static and templates
-app.mount("/static", StaticFiles(directory="knowledge/static"), name="static")
-templates = Jinja2Templates(directory="knowledge/templates")
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 app.state.templates = templates  # share with routers via request.app.state
+app.state.base_template_context = _base_context()
 
 # Include routers
 app.include_router(progress.router)
@@ -93,7 +133,6 @@ app.include_router(classroom_router)
 
 # Orchestrator (starts Scout background loop)
 orchestrator = Orchestrator()
-orchestrator.start_scout_loop()
 
 # Ensure schema exists even when app lifespan isn't entered (e.g., raw TestClient usage).
 db.init_db()
@@ -115,7 +154,8 @@ class MarkOwnedRequest(BaseModel):
 
 
 class LLMConfigRequest(BaseModel):
-    ollama_host: str
+    ollama_base_url: str | None = None
+    ollama_host: str | None = None
     scout_model: str
     sage_model: str
     lens_model: str
@@ -141,14 +181,32 @@ async def root():
 async def read_ledger(request: Request):
     debts = db.get_all_active_debt(include_legacy=False)
     heatmap = db.get_class_heatmap(include_legacy=False)
-    return templates.TemplateResponse(request, "ledger.html", {
+    return templates.TemplateResponse(request, "ledger.html", _base_context({
         "debts_json": json.dumps(debts),
         "heatmap_json": json.dumps(heatmap)
-    })
+    }))
 
 @app.get("/help", response_class=HTMLResponse)
 async def read_help(request: Request):
-    return templates.TemplateResponse(request, "help.html", {})
+    return templates.TemplateResponse(request, "help.html", _base_context())
+
+
+@app.get("/health")
+async def health():
+    ollama_ok = await check_health()
+    return {
+        "status": "ok",
+        "environment": config.ENVIRONMENT,
+        "ollama": "reachable" if ollama_ok else "unreachable",
+        "ollama_url": config.OLLAMA_BASE_URL,
+    }
+
+
+@app.get("/api/warmup")
+async def warmup():
+    """Fire-and-forget warmup endpoint to reduce first-judge latency."""
+    asyncio.create_task(check_health())
+    return {"status": "warming"}
 
 
 # ── Agent API Endpoints ───────────────────────────────────────────────────────
@@ -158,6 +216,17 @@ async def get_state():
     debts = db.get_all_active_debt(include_legacy=False)
     heatmap = db.get_class_heatmap(include_legacy=False)
     return {"debts": debts, "heatmap": heatmap}
+
+
+@app.get("/api/events")
+async def get_events(limit: int = Query(50, ge=1, le=500)):
+    events = []
+    while len(events) < limit:
+        try:
+            events.append(orchestrator.event_bus.get_nowait())
+        except queue.Empty:
+            break
+    return events
 
 
 @app.get("/api/debt-score")
@@ -182,7 +251,7 @@ async def get_debt_score():
 @app.get("/api/llm/config")
 async def get_llm_config():
     runtime = config.get_runtime_llm_config()
-    models = config.fetch_ollama_models(runtime["ollama_host"])
+    models = config.fetch_ollama_models(runtime["ollama_base_url"])
     return {
         **runtime,
         "available_models": models
@@ -191,31 +260,32 @@ async def get_llm_config():
 
 @app.get("/api/llm/models")
 async def get_llm_models(host: str = Query(None)):
-    target_host = host or config.OLLAMA_HOST
+    target_host = host or config.OLLAMA_BASE_URL
     models = config.fetch_ollama_models(target_host)
     return {"host": target_host, "models": models}
 
 
 @app.post("/api/llm/config")
 async def update_llm_config(req: LLMConfigRequest):
-    if not req.ollama_host.strip():
+    base_url = (req.ollama_base_url or req.ollama_host or "").strip()
+    if not base_url:
         raise HTTPException(status_code=400, detail="Ollama host is required")
     if not req.scout_model.strip() or not req.sage_model.strip() or not req.lens_model.strip():
         raise HTTPException(status_code=400, detail="All model fields are required")
 
     updated = config.set_runtime_llm_config(
-        ollama_host=req.ollama_host,
+        ollama_base_url=base_url,
         scout_model=req.scout_model,
         sage_model=req.sage_model,
         lens_model=req.lens_model,
     )
     db.save_llm_settings(
-        ollama_host=updated["ollama_host"],
+        ollama_base_url=updated["ollama_base_url"],
         scout_model=updated["scout_model"],
         sage_model=updated["sage_model"],
         lens_model=updated["lens_model"],
     )
-    models = config.fetch_ollama_models(updated["ollama_host"])
+    models = config.fetch_ollama_models(updated["ollama_base_url"])
     return {
         "status": "ok",
         **updated,

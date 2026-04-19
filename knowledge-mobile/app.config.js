@@ -3,7 +3,7 @@ module.exports = {
     name: 'KnowLedge Mobile',
     slug: 'knowledge-mobile',
     scheme: 'knowledgemobile',
-    plugins: ['expo-router'],
+    plugins: ['expo-router', 'expo-asset', 'expo-secure-store', 'expo-sqlite'],
     android: {
       permissions: [
         'CAMERA',
@@ -20,11 +20,6 @@ module.exports = {
       infoPlist: {
         NSCameraUsageDescription: 'Lens uses your camera to verify handwritten work',
         NSMicrophoneUsageDescription: 'Sage uses your microphone for voice responses',
-      },
-    },
-    extra: {
-      eas: {
-        projectId: 'replace-with-your-eas-project-id',
       },
     },
   },

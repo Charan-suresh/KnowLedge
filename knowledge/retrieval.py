@@ -1,21 +1,22 @@
 import sys
 import logging
 from typing import Optional, Dict, Any, List
-import ollama
 import httpx
 
 from .rag import query_context, get_collection as init_vectorstore
 from . import config
+from .agents.ollama_client import chat
 
 logger = logging.getLogger(__name__)
 
-def verify_offline(model: str = "gemma4:e4b-it") -> bool:
+def verify_offline(model: str = "gemma4:e4b") -> bool:
     """
     Checks if Ollama is reachable locally and if the specified model is available.
     Returns True if offline inference is ready, False otherwise.
     """
     try:
-        response = httpx.get(f"{config.OLLAMA_HOST}/api/tags", timeout=3)
+        headers = {"Authorization": f"Bearer {config.OLLAMA_AUTH_TOKEN}"} if config.OLLAMA_AUTH_TOKEN else {}
+        response = httpx.get(f"{config.OLLAMA_BASE_URL}/api/tags", timeout=3, headers=headers)
         response.raise_for_status()
         models = [m["name"] for m in response.json().get("models", [])]
         if any(model == m or m.startswith(model + ":") for m in models):
@@ -25,7 +26,7 @@ def verify_offline(model: str = "gemma4:e4b-it") -> bool:
             print(f"❌ Offline verification failed: Model '{model}' not found in local Ollama.")
             return False
     except httpx.HTTPError as e:
-        print(f"❌ Offline verification failed: Could not connect to local Ollama at {config.OLLAMA_HOST}.")
+        print(f"❌ Offline verification failed: Could not connect to Ollama at {config.OLLAMA_BASE_URL}.")
         print(f"Details: {e}")
         return False
 
@@ -60,7 +61,7 @@ def build_context(question: str, source_filter: Optional[str] = None) -> str:
         
     return "\\n\\n---\\n\\n".join(valid_chunks)
 
-def rag_query(question: str, source_filter: Optional[str] = None, model: str = "gemma4:e4b-it") -> Dict[str, Any]:
+def rag_query(question: str, source_filter: Optional[str] = None, model: str = "gemma4:e4b") -> Dict[str, Any]:
     """
     Executes an end-to-end offline RAG pipeline natively using Ollama.
     Retrieves formatted context via build_context(), fetches the raw dicts,
@@ -107,8 +108,7 @@ def rag_query(question: str, source_filter: Optional[str] = None, model: str = "
 
     # 4. Generate Response via Ollama
     try:
-        client = ollama.Client(host=config.OLLAMA_HOST)
-        response = client.chat(
+        response = chat(
             model=model,
             messages=[
                 {"role": "system", "content": system_prompt},

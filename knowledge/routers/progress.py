@@ -22,7 +22,8 @@ async def get_progress(request: Request):
     # Weekly report mock just for streak
     weekly = db.get_weekly_report("demo")
     
-    return request.app.state.templates.TemplateResponse(request, "progress.html", {
+    context = {
+        **request.app.state.base_template_context,
         "progress_data_json": json.dumps(progress_data),
         "clearing_velocity_json": json.dumps(clearing_velocity),
         "subject_breakdown_json": json.dumps(subject_breakdown),
@@ -32,7 +33,8 @@ async def get_progress(request: Request):
         "cleared_this_month": cleared_this_month,
         "avg_days_to_clear": round(avg_days_to_clear, 1),
         "streak_days": weekly['streak_days']
-    })
+    }
+    return request.app.state.templates.TemplateResponse(request, "progress.html", context)
 
 @router.get("/progress/data", response_class=JSONResponse)
 async def get_progress_data(days: int = 30):

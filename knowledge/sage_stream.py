@@ -12,12 +12,7 @@ import asyncio
 from typing import AsyncGenerator, Optional
 from . import db
 from . import config
-
-try:
-    import ollama
-    OLLAMA_AVAILABLE = True
-except ImportError:
-    OLLAMA_AVAILABLE = False
+from .agents.ollama_client import stream_chat
 
 # RAG retrieval — gracefully skipped if vectorstore not ready
 try:
@@ -92,38 +87,10 @@ async def run_sage_ollama(
     system_prompt = _build_system_prompt(concept, debt_entries)
     messages = [{"role": "system", "content": system_prompt}] + chat_history
 
-    if not OLLAMA_AVAILABLE:
-        # Dev fallback — simulate streaming without Ollama
-        mock = (
-            f"Let's explore **{concept}**. "
-            "Can you explain it to me as if I've never encountered it before?"
-        )
-        for word in mock.split():
-            yield word + " "
-            await asyncio.sleep(0.04)
-        return
-
     full_reply = ""
     try:
-        client = ollama.AsyncClient(host=config.OLLAMA_HOST)
-        stream = await client.chat(
-            model=config.SAGE_MODEL,
-            messages=messages,
-            stream=True,
-        )
-
-        if hasattr(stream, "__aiter__"):
-            async for chunk in stream:
-                if isinstance(chunk, dict):
-                    token = chunk.get("message", {}).get("content", "")
-                else:
-                    message = getattr(chunk, "message", None)
-                    token = getattr(message, "content", "") if message is not None else ""
-                full_reply += token
-                yield token
-        else:
-            message = getattr(stream, "message", None)
-            token = getattr(message, "content", "") if message is not None else ""
+        async for chunk in stream_chat(model=config.SAGE_MODEL, messages=messages):
+            token = chunk.get("message", {}).get("content", "")
             full_reply += token
             if token:
                 yield token

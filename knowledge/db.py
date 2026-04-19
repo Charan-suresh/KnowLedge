@@ -187,6 +187,35 @@ def run_migrations() -> None:
         """)
 
 
+def seed_demo_data_if_empty() -> bool:
+    """Seed realistic two-week demo rows on fresh/empty databases."""
+    with get_connection() as conn:
+        existing = conn.execute("SELECT COUNT(*) AS n FROM debt_log").fetchone()["n"]
+        if existing and existing > 0:
+            return False
+
+        rows = [
+            ("Recursion Base Case", "Missing base case in recursive Fibonacci implementation", 0.92, "on_loan", "-13 days"),
+            ("Binary Search Invariants", "Search bounds were not updated correctly", 0.87, "persists", "-12 days"),
+            ("Hash Map Collision", "Chaining vs open addressing tradeoff explanation", 0.78, "clear", "-11 days"),
+            ("Big O Notation", "Confused O(n log n) with O(log n)", 0.84, "clear", "-10 days"),
+            ("Dynamic Programming", "Could not justify overlapping subproblems", 0.81, "on_loan", "-9 days"),
+            ("Graph Traversal", "BFS visited-set placement mistake", 0.89, "on_loan", "-7 days"),
+            ("SQL Join Semantics", "LEFT JOIN filtering applied in WHERE", 0.76, "persists", "-5 days"),
+            ("Pointer Aliasing", "Mutating shared references unexpectedly", 0.74, "on_loan", "-2 days"),
+        ]
+
+        for concept, source_text, confidence, status, offset in rows:
+            conn.execute(
+                """
+                INSERT INTO debt_log (concept, source_text, confidence, status, timestamp)
+                VALUES (?, ?, ?, ?, datetime('now', ?))
+                """,
+                (concept, source_text, confidence, status, offset),
+            )
+        return True
+
+
 def insert_clearing_history(
     concept: str,
     result: str,
@@ -880,7 +909,8 @@ def set_app_setting(key: str, value: str) -> None:
 
 def get_llm_settings() -> Dict[str, Optional[str]]:
     return {
-        "ollama_host": get_app_setting("ollama_host"),
+        "ollama_base_url": get_app_setting("ollama_base_url") or get_app_setting("ollama_host"),
+        "ollama_host": get_app_setting("ollama_base_url") or get_app_setting("ollama_host"),
         "scout_model": get_app_setting("scout_model"),
         "sage_model": get_app_setting("sage_model"),
         "lens_model": get_app_setting("lens_model"),
@@ -888,12 +918,13 @@ def get_llm_settings() -> Dict[str, Optional[str]]:
 
 
 def save_llm_settings(
-    ollama_host: str,
+    ollama_base_url: str,
     scout_model: str,
     sage_model: str,
     lens_model: str,
 ) -> None:
-    set_app_setting("ollama_host", ollama_host)
+    set_app_setting("ollama_base_url", ollama_base_url)
+    set_app_setting("ollama_host", ollama_base_url)
     set_app_setting("scout_model", scout_model)
     set_app_setting("sage_model", sage_model)
     set_app_setting("lens_model", lens_model)

@@ -1,7 +1,7 @@
-import ollama
 from dataclasses import dataclass
 from typing import List
 from . import config
+from .agents.ollama_client import chat
 import logging
 
 logger = logging.getLogger(__name__)
@@ -58,9 +58,8 @@ def tag_content(text: str) -> List[ConceptTag]:
     )
 
     try:
-        client = ollama.Client(host=config.OLLAMA_HOST)
-        response = client.chat(
-            model=config.SENTINEL_MODEL,
+        response = chat(
+            model=config.SCOUT_MODEL,
             messages=[
                 {'role': 'system', 'content': SYSTEM_PROMPT},
                 {'role': 'user', 'content': f"Analyze this student input:\n\n{text}"}

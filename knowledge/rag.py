@@ -1,6 +1,7 @@
 import sys
 import os
 from typing import List, Dict, Any
+from . import config
 
 try:
     import chromadb
@@ -28,10 +29,10 @@ def init_vectorstore() -> chromadb.Collection:
         return _collection
 
     try:
-        client = chromadb.PersistentClient(path="./cdt_vectorstore")
+        client = chromadb.PersistentClient(path=config.CHROMA_PATH)
         
         ef = embedding_functions.OllamaEmbeddingFunction(
-            url="http://localhost:11434/api/embeddings",
+            url=f"{config.OLLAMA_BASE_URL}/api/embeddings",
             model_name="nomic-embed-text"
         )
         

@@ -1,4 +1,31 @@
+# Python
 __pycache__/
-*.db
-.DS_Store
+*.py[cod]
+.env
+.venv/
+venv/
+
+# Database - never commit real data
+knowledge.db
+debt_log.db
+chroma_store/
 cdt_vectorstore/
+
+# Secrets - never commit these
+cloud-run/invoker-key.json
+*.key
+.env.local
+.env.production
+
+# macOS
+.DS_Store
+
+# Device key
+~/.knowledge/
+
+# Logs
+*.log
+
+# Generated tool output
+knowledge-mobile/node_modules/
+knowledge-mobile/.expo/

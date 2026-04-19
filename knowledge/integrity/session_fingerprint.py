@@ -18,6 +18,15 @@ def _device_secret() -> bytes:
     return key_path.read_text(encoding="utf-8").strip().encode("utf-8")
 
 
+def generate_device_key_if_missing() -> str:
+    """Ensure the device key exists and return its path."""
+    key_path = Path(os.path.expanduser(config.DEVICE_KEY_PATH))
+    key_path.parent.mkdir(parents=True, exist_ok=True)
+    if not key_path.exists():
+        key_path.write_text(os.urandom(32).hex(), encoding="utf-8")
+    return str(key_path)
+
+
 def _extract_response_times(chat_history: List[Dict[str, Any]]) -> List[float]:
     times: List[float] = []
     for msg in chat_history:
