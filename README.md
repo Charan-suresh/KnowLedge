@@ -1,8 +1,8 @@
 ---
 title: KnowLedge
 emoji: "🦉"
-colorFrom: amber
-colorTo: teal
+colorFrom: yellow
+colorTo: blue
 sdk: gradio
 app_file: app.py
 pinned: false
