@@ -126,9 +126,9 @@ Why this works well:
 Recommended setup:
 
 1. Create a new Hugging Face Space.
-2. Select the Streamlit SDK.
+2. Select the **Gradio** SDK (industry standard for ML demo UIs).
 3. Point the Space to this repository's `app.py`.
-4. Add `streamlit` to the dependencies file, which is already done.
+4. Add `gradio` to the dependencies file, which is already done.
 5. If you want live backend data, set a Space secret named `KNOWLEDGE_API_URL` to your deployed backend URL.
 6. Share the Space URL in your Kaggle submission as the live demo link.
 

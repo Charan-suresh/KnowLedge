@@ -1,7 +1,7 @@
 fastapi
 uvicorn
 python-multipart
-streamlit
+gradio
 httpx
 ollama
 chromadb
