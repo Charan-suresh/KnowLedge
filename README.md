@@ -1,3 +1,13 @@
+---
+title: KnowLedge
+emoji: "🦉"
+colorFrom: amber
+colorTo: teal
+sdk: gradio
+app_file: app.py
+pinned: false
+---
+
 # KnowLedge
 
 KnowLedge is a local-first learning verification platform built for the Gemma 4 for Good hackathon.
