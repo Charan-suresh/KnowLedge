@@ -1,0 +1,7 @@
+{
+  "name": "gemma-inference",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.ts",
+  "description": "Expo native module scaffold for Gemma 4 inference on Android and iOS"
+}

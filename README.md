@@ -1,95 +1,120 @@
-# 🧠 Comprehension Debt Tracker (CDT)
+# KnowLedge
 
-> Ask question → get answer? **No.** <br>
-> Track understanding → enforce learning → verify mastery. **Yes.**
+KnowLedge is a local-first learning platform for tracking borrowed understanding, clearing it through Socratic dialogue, and reporting aggregate progress. The repository now contains two codebases:
 
-The **Comprehension Debt Tracker (CDT)** is a structured behavioral intelligence ecosystem built entirely on localized AI. It forces students to confront their **AI over-reliance** by measuring what they passively "borrow" (copy/paste) and making them pay it back through rigorous, multi-modal Socratic clearance. 
+- The desktop/web app and backend live at the repository root in the `knowledge/` package.
+- The mobile companion app lives in `knowledge-mobile/`.
 
----
+The backend is designed to run locally with Ollama, SQLite, and ChromaDB. The mobile workspace is an Expo app scaffold with the same product model and a native inference bridge stub for future Android and iOS work.
 
-## 🔥 Why This Matters (The Real Problem)
-Generative AI has radically shifted modern education from *critical reasoning* to *passive reliance*. Students frequently copy and paste architectural patterns or equations they don't fully understand. CDT introduces the concept of a **Learning Debt Score** (similar to a FICO credit score) that actively drops when a student cuts corners, solving the systemic over-reliance problem using the very AI tools that created it.
+## Repository Layout
 
----
+- `knowledge/` - FastAPI backend, orchestration, sync, integrity, and template rendering.
+- `knowledge_dashboard.html` - Standalone dashboard prototype used during UI work.
+- `knowledge-mobile/` - Expo + React Native companion app.
+- `cdt_vectorstore/` - Local ChromaDB persistence.
+- `requirements.txt` - Python dependencies for the backend.
 
-## 🏗️ System Architecture (Full Pipeline)
+## Backend Setup
 
-CDT is not a singular chatbot. It is a rigorous **end-to-end learning verification system**:
+### 1. Create and activate a Python environment
 
-```mermaid
-graph TD
-    A[Student pastes code/notes] -->|Background Analysis| B(Phase 1: The Sentinel)
-    B -->|Logs conceptual gaps| C[(SQLite: Debt Log)]
-    C -->|FICO Score Drops| D(Debt Score Visualization)
-    
-    C -->|End of Week| E(Phase 2: The Debt Collector)
-    F[(ChromaDB: Syllabus RAG)] -->|Context Extraction| E
-    E -->|Socratic Dialogue| G{Mastery Achieved?}
-    G -->|Yes| H[Debt Cleared / Score Rises]
-    G -->|No| E
-    
-    H -->|Midterm Testing| I(Phase 3: The Examiner)
-    I -->|Prompt / Vision / Audio| J{Unassisted Test}
-    J -->|Pass| K[True Mastery]
-    J -->|Fail| L[Status: Persistent Reliance / Score Crashes]
-```
+Use the environment manager you already have, or create one with your preferred tool. If you are using `venv`, a typical setup looks like this:
 
----
-
-## 🧠 Why strictly Gemma?
-
-This architecture was purpose-built exclusively around the **Gemma-4** ecosystem for maximum efficacy and student privacy:
-- **Zero Privacy Leakage:** Because CDT intercepts all a student's personal notes and keystrokes, utilizing Cloud APIs is unethical. Gemma runs **locally offline via Ollama**, guaranteeing total privacy.
-- `gemma-4-E2B` (The Tracking Agent): Lightweight and hyper-fast, operating quietly in the background (The Sentinel) using **native function calling** to extract precise concepts without stalling the student's workflow.
-- `gemma-4-E4B` (The Socratic / Multimodal Examiner): Leveraged for deep, robust reasoning logic during RAG context injection, and its incredible **Vision / Audio Multimodality** to parse handwritten exams inside the Sanctuary.
-
----
-
-## 🚀 The Three Phases
-
-### 🛡️ Phase 1: **The Sentinel** (Passive Tracking)
-A Streamlit sidebar observer with a real-time **FICO Learning Score**. As you paste concepts you don't grasp, your score tanks in real-time, mapping precisely what knowledge you lack.
-
-### 🕵️‍♂️ Phase 2: **The Debt Collector** (Active Clearing)
-An offline Socratic clearance agent grounded completely in your local syllabus via ChromaDB. It refuses to hand out answers, dynamically navigating the student to independent realization before restoring their score.
-
-### 👁️ Phase 3: **The Examiner** (Multimodal Verification)
-Testing genuine mastery via an offline "Sanctuary" environment:
-- **Vision Integration**: Aim your webcam at handwritten work. The model identifies where your logic fails and overlays a red bounding box.
-- **Relapse Trigger**: Evaluates independent explanations without AI-assist. If the student fails a concept they supposedly "cleared", they are strictly flagged for **Persistent Reliance**.
-
----
-
-## 🎥 Demonstration
-*(Embed your 2-3 minute YouTube / GIF demonstration here! Show the Sentinel extracting code, the Collector guiding logic, and the Examiner Vision Box in action!)*
-
----
-
-## 💻 Quick Start
-
-### 1. Prerequisites
-Pull the Gemma ecosystem locally via Ollama:
 ```bash
-ollama run gemma-4-E2B
-ollama run gemma-4-E4B
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
-Install the required environment:
+### 2. Install Python dependencies
+
 ```bash
-git clone https://github.com/Charan-suresh/CDT.git
-cd CDT
-pip3 install streamlit ollama chromadb pdfplumber pillow
+pip install -r requirements.txt
 ```
 
-### 2. Run the Local Framework ⚙️
-Be sure to spin up the background Ollama daemon (`ollama serve`) first in terminal 1.
+### 3. Start Ollama
 
-Then load your syllabus (Terminal 2):
+KnowLedge expects a local Ollama server.
+
 ```bash
-python3 vectorize.py ./Dsa.pdf
+ollama serve
 ```
 
-Spin up the phases (Terminal 3):
-- **Sentinel**: `python3 -m streamlit run sentinel.py`
-- **Debt Collector**: `python3 -m streamlit run debt_collector.py`
-- **Examiner**: `python3 -m streamlit run examiner.py`
+If you plan to use the default Gemma models, make sure the tags you reference in `knowledge/config.py` are available in your Ollama install.
+
+### 4. Run the backend
+
+```bash
+python -m uvicorn knowledge.main:app --host 127.0.0.1 --port 8000
+```
+
+The main views are available at:
+
+- `http://127.0.0.1:8000/ledger`
+- `http://127.0.0.1:8000/progress`
+- `http://127.0.0.1:8000/reports`
+- `http://127.0.0.1:8000/help`
+
+### 5. Optional: ingest syllabus material into ChromaDB
+
+```bash
+python -m knowledge.vectorize path/to/course_material.pdf
+```
+
+This populates the local vector store in `cdt_vectorstore/` for RAG-backed Sage responses.
+
+## Mobile Setup
+
+The mobile app is self-contained in `knowledge-mobile/`.
+
+```bash
+cd knowledge-mobile
+npm install
+npx expo start
+```
+
+For native builds or device testing:
+
+```bash
+npm run android
+npm run ios
+```
+
+The mobile app supports three runtime modes:
+
+- `on_device_full`
+- `on_device_scout`
+- `server_only`
+
+Mode detection and model readiness are handled in the app settings, and the native Gemma bridge is scaffolded for future Android/iOS implementation.
+
+## Configuration Notes
+
+The backend reads its main settings from `knowledge/config.py` and environment variables. The most important ones are:
+
+- `OLLAMA_HOST`
+- `SCOUT_MODEL`
+- `SAGE_MODEL`
+- `LENS_MODEL`
+- `DB_PATH`
+- `CHROMA_PATH`
+- `SYNC_ON_WIFI_ONLY`
+
+The mobile app has its own Expo configuration in `knowledge-mobile/app.config.js` and `knowledge-mobile/app.json`.
+
+## Testing
+
+Backend smoke and contract tests are available in `tests/`.
+
+```bash
+python -m pytest
+```
+
+If you only want a quick sanity check, the lightweight smoke scripts in the root of the repository can also be run directly.
+
+## Notes
+
+- The project is designed to run offline-first wherever possible.
+- Sync is privacy-preserving and only shares concept-level aggregates.
+- The current mobile native inference module is scaffolded, not fully implemented.
+- If you are changing the backend schema, start by reviewing `knowledge/db.py` and `knowledge/main.py`.

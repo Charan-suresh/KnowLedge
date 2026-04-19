@@ -1,9 +1,13 @@
 import sys
+import logging
 from typing import Optional, Dict, Any, List
-import requests
 import ollama
+import httpx
 
-from rag import query_context, get_collection as init_vectorstore
+from .rag import query_context, get_collection as init_vectorstore
+from . import config
+
+logger = logging.getLogger(__name__)
 
 def verify_offline(model: str = "gemma4:e4b-it") -> bool:
     """
@@ -11,7 +15,7 @@ def verify_offline(model: str = "gemma4:e4b-it") -> bool:
     Returns True if offline inference is ready, False otherwise.
     """
     try:
-        response = requests.get("http://localhost:11434/api/tags", timeout=3)
+        response = httpx.get(f"{config.OLLAMA_HOST}/api/tags", timeout=3)
         response.raise_for_status()
         models = [m["name"] for m in response.json().get("models", [])]
         if any(model == m or m.startswith(model + ":") for m in models):
@@ -20,8 +24,8 @@ def verify_offline(model: str = "gemma4:e4b-it") -> bool:
         else:
             print(f"❌ Offline verification failed: Model '{model}' not found in local Ollama.")
             return False
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Offline verification failed: Could not connect to local Ollama at http://localhost:11434.")
+    except httpx.HTTPError as e:
+        print(f"❌ Offline verification failed: Could not connect to local Ollama at {config.OLLAMA_HOST}.")
         print(f"Details: {e}")
         return False
 
@@ -86,8 +90,8 @@ def rag_query(question: str, source_filter: Optional[str] = None, model: str = "
                     if source_filter and res.get('metadata', {}).get('source') != source_filter:
                         continue
                     context_used.append(res)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Unable to hydrate context_used from vector store: %s", e)
 
     # 3. Construct strict system prompt
     system_prompt = (
@@ -103,7 +107,8 @@ def rag_query(question: str, source_filter: Optional[str] = None, model: str = "
 
     # 4. Generate Response via Ollama
     try:
-        response = ollama.chat(
+        client = ollama.Client(host=config.OLLAMA_HOST)
+        response = client.chat(
             model=model,
             messages=[
                 {"role": "system", "content": system_prompt},

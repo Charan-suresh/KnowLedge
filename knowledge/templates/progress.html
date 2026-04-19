@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+
+{% block title %}Progress · KnowLedge{% endblock %}
+{% block topbar_title %}Your Progress{% endblock %}
+
+{% block head %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block topbar_actions %}
+  <div class="btn-group" id="date-range-group">
+    <button class="btn-ghost active" onclick="updateDateRange(7, this)">7d</button>
+    <button class="btn-ghost" onclick="updateDateRange(30, this)">30d</button>
+    <button class="btn-ghost" onclick="updateDateRange(365, this)">All</button>
+  </div>
+  <style>
+    .btn-group { display: flex; gap: 4px; }
+    .btn-group .btn-ghost.active { background: var(--amber-light); border-color: var(--amber); color: var(--amber); }
+  </style>
+{% endblock %}
+
+{% block content %}
+<!-- Section 1 -->
+<div class="stats-row">
+  <div class="stat-card ink">
+    <div class="stat-label">Debt Score Today</div>
+    <div class="stat-val">{{ curr_debt_score }}%</div>
+    <div class="stat-sub">
+      {% if curr_debt_score < prev_debt_score %}
+      <span style="color:var(--teal)">↓ improved</span> from {{ prev_debt_score }}%
+      {% else %}
+      <span style="color:var(--coral)">↑ increased</span> from {{ prev_debt_score }}%
+      {% endif %}
+    </div>
+  </div>
+  <div class="stat-card teal">
+    <div class="stat-label">Cleared this month</div>
+    <div class="stat-val">{{ cleared_this_month }}</div>
+    <div class="stat-sub">concepts moved to Owned</div>
+  </div>
+  <div class="stat-card amber">
+    <div class="stat-label">Avg. days to clear</div>
+    <div class="stat-val">{{ avg_days_to_clear }}</div>
+    <div class="stat-sub">from borrowed to owned</div>
+  </div>
+  <div class="stat-card coral">
+    <div class="stat-label">Current streak</div>
+    <div class="stat-val">{{ streak_days }}</div>
+    <div class="stat-sub">days clearing debt</div>
+  </div>
+</div>
+
+<!-- Section 2 -->
+<div class="grid-2col" style="margin-top: 28px; grid-template-columns: 1fr 1fr;">
+  <div class="ledger-card" style="padding: 0;">
+    <div class="panel-header" style="padding: 18px 22px; border-bottom: 1px solid var(--rule);">
+      <h2 style="font-family: 'Playfair Display', serif; font-size: 17px;">Debt score over time</h2>
+      <span class="tag" id="line-chart-tag">30 days</span>
+    </div>
+    <div style="padding: 0 20px 20px;">
+      <canvas id="debtLineChart" style="max-height: 260px;"></canvas>
+    </div>
+  </div>
+
+  <div class="ledger-card" style="padding: 0;">
+    <div class="panel-header" style="padding: 18px 22px; border-bottom: 1px solid var(--rule);">
+      <h2 style="font-family: 'Playfair Display', serif; font-size: 17px;">Concepts cleared per day</h2>
+    </div>
+    <div style="padding: 0 20px 20px;">
+      <canvas id="clearedBarChart" style="max-height: 260px;"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- Section 3 -->
+<div class="grid-2col" style="margin-top: 28px; grid-template-columns: 1.4fr 1fr;">
+  <div class="ledger-card" style="padding: 0;">
+    <div class="panel-header" style="padding: 18px 22px; border-bottom: 1px solid var(--rule);">
+      <h2 style="font-family: 'Playfair Display', serif; font-size: 17px;">Time to clear by concept</h2>
+    </div>
+    <div style="padding: 0 20px 20px;">
+      <canvas id="timeToClearChart" style="max-height: 260px;"></canvas>
+    </div>
+  </div>
+
+  <div class="ledger-card" style="padding: 0;">
+    <div class="panel-header" style="padding: 18px 22px; border-bottom: 1px solid var(--rule);">
+      <h2 style="font-family: 'Playfair Display', serif; font-size: 17px;">Subject breakdown</h2>
+    </div>
+    <div style="padding: 0 20px 20px; position: relative;">
+      <canvas id="subjectDoughnutChart" style="max-height: 260px;"></canvas>
+      <div style="position: absolute; top: 45%; left: 50%; transform: translate(-50%, -50%); text-align: center;">
+        <div style="font-family: 'Playfair Display', serif; font-size: 32px; font-weight: 700; line-height: 1;" id="doughnut-total">0</div>
+        <div style="font-size: 11px; color: var(--ink-muted); margin-top: 4px;">active debt</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Initial Data from Jinja2
+  let progressData = {{ progress_data_json | safe }};
+  let velocityData = {{ clearing_velocity_json | safe }};
+  const subjectBreakdown = {{ subject_breakdown_json | safe }};
+  const timeToClear = {{ concept_time_to_clear_json | safe }};
+
+  // Chart.js Global Config
+  Chart.defaults.font.family = "'DM Sans', sans-serif";
+  Chart.defaults.color = "#7A7565";
+  Chart.defaults.plugins.legend.display = false;
+
+  const styleStyle = getComputedStyle(document.body);
+  const amber = styleStyle.getPropertyValue('--amber').trim() || '#D4820A';
+  const teal = styleStyle.getPropertyValue('--teal').trim() || '#0E7A6E';
+  const coral = styleStyle.getPropertyValue('--coral').trim() || '#C94A3A';
+  const rule = styleStyle.getPropertyValue('--rule').trim() || 'rgba(28,26,20,0.12)';
+  const ink = styleStyle.getPropertyValue('--ink').trim() || '#1C1A14';
+
+  // 1. Line Chart
+  const ctxLine = document.getElementById('debtLineChart').getContext('2d');
+  const lineChart = new Chart(ctxLine, {
+    type: 'line',
+    data: {
+      labels: progressData.map(d => d.date),
+      datasets: [{
+        data: progressData.map(d => d.debt_score),
+        borderColor: amber,
+        backgroundColor: 'rgba(212, 130, 10, 0.12)',
+        fill: true,
+        pointRadius: 3,
+        pointHoverRadius: 5,
+        tension: 0.3
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        x: { grid: { display: false } },
+        y: { grid: { color: rule }, min: 0, max: 100 }
+      },
+      plugins: {
+        tooltip: {
+          backgroundColor: ink, titleColor: '#fff', bodyColor: '#fff',
+          titleFont: { family: "'DM Mono', monospace" },
+          callbacks: { label: (ctx) => `Debt: ${ctx.raw}%` }
+        }
+      }
+    }
+  });
+
+  // 2. Bar Chart
+  const ctxBar = document.getElementById('clearedBarChart').getContext('2d');
+  const barChart = new Chart(ctxBar, {
+    type: 'bar',
+    data: {
+      labels: velocityData.map(d => d.date),
+      datasets: [{
+        data: velocityData.map(d => d.cleared_count),
+        backgroundColor: teal,
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        x: { grid: { display: false } },
+        y: { grid: { color: rule }, beginAtZero: true, ticks: { stepSize: 1 } }
+      },
+      plugins: {
+        tooltip: {
+          backgroundColor: ink,
+          callbacks: { label: (ctx) => `Cleared: ${ctx.raw} concepts` }
+        }
+      }
+    }
+  });
+
+  // 3. Horizontal Bar Chart (Time to clear)
+  // Sort descending by days
+  const clearTimes = timeToClear
+    .filter(c => Number.isFinite(c.days_to_clear))
+    .sort((a, b) => b.days_to_clear - a.days_to_clear);
+  const colors = clearTimes.map(c => {
+    if(c.days_to_clear > 14) return coral;
+    if(c.days_to_clear >= 7) return amber;
+    return teal;
+  });
+  
+  const ctxHzBar = document.getElementById('timeToClearChart').getContext('2d');
+  const hzBarChart = new Chart(ctxHzBar, {
+    type: 'bar',
+    data: {
+      labels: clearTimes.map(c => c.concept),
+      datasets: [{
+        data: clearTimes.map(c => c.days_to_clear),
+        backgroundColor: colors,
+        borderRadius: 4
+      }]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      scales: { x: { grid: { color: rule } }, y: { grid: { display: false } } },
+      plugins: {
+        tooltip: { backgroundColor: ink, callbacks: { label: (ctx) => `${ctx.raw} days` } }
+      }
+    }
+  });
+
+  // 4. Doughnut Chart
+  let totalActive = 0;
+  subjectBreakdown.forEach(s => totalActive += (s.on_loan + s.persists));
+  document.getElementById('doughnut-total').innerText = totalActive;
+
+  const doughColors = [amber, teal, coral, ink, '#7A7565'];
+  const ctxDoughnut = document.getElementById('subjectDoughnutChart').getContext('2d');
+  new Chart(ctxDoughnut, {
+    type: 'doughnut',
+    data: {
+      labels: subjectBreakdown.map(s => s.subject),
+      datasets: [{
+        data: subjectBreakdown.map(s => s.on_loan + s.persists),
+        backgroundColor: doughColors,
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      cutout: '75%',
+      plugins: {
+        legend: { display: true, position: 'bottom', labels: { usePointStyle: true, boxWidth: 8 } }
+      }
+    }
+  });
+
+  // Interactive Fetch
+  async function updateDateRange(days, btnElement) {
+    document.querySelectorAll('#date-range-group .btn-ghost').forEach(b => b.classList.remove('active'));
+    btnElement.classList.add('active');
+    document.getElementById('line-chart-tag').innerText = days === 365 ? 'All time' : `${days} days`;
+
+    const res = await fetch(`/progress/data?days=${days}`);
+    const data = await res.json();
+    
+    lineChart.data.labels = data.progress.map(d => d.date);
+    lineChart.data.datasets[0].data = data.progress.map(d => d.debt_score);
+    lineChart.update();
+
+    barChart.data.labels = data.velocity.map(d => d.date);
+    barChart.data.datasets[0].data = data.velocity.map(d => d.cleared_count);
+    barChart.update();
+  }
+</script>
+{% endblock %}

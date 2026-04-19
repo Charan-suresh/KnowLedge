@@ -1,0 +1,393 @@
+{% extends "base.html" %}
+
+{% block title %}Help · KnowLedge{% endblock %}
+{% block topbar_title %}Help Center{% endblock %}
+{% block topbar_sub %}Learn how to use KnowLedge in minutes{% endblock %}
+
+{% block topbar_actions %}
+  <a class="btn-ghost" href="/ledger">← Back to Ledger</a>
+{% endblock %}
+
+{% block content %}
+<div class="help-page">
+  <section class="help-hero">
+    <h2>🎓 What is KnowLedge?</h2>
+    <p>
+      KnowLedge helps you transform borrowed understanding into mastery. It tracks concepts you learn, 
+      guides you through focused clearing sessions, and marks each concept's status as <strong>On Loan</strong>, 
+      <strong>Clear</strong>, or <strong>Persists</strong>.
+    </p>
+
+    <div class="help-hero-grid">
+      <div class="help-card">
+        <div class="help-card-icon">⚡</div>
+        <h3>Scout Tagging</h3>
+        <p>Paste your study notes or code. Scout automatically detects key concepts and logs them to your personal ledger.</p>
+      </div>
+      <div class="help-card">
+        <div class="help-card-icon">🦉</div>
+        <h3>Sage Clearing</h3>
+        <p>Engage in a guided Socratic dialogue. Explain concepts in your own words and unlock mastery verification.</p>
+      </div>
+      <div class="help-card">
+        <div class="help-card-icon">🔬</div>
+        <h3>Lens Verification</h3>
+        <p>Upload handwritten solutions to verify your reasoning and identify remaining knowledge gaps.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="help-tabs">
+    <div class="tab-row help-tab-row" role="tablist" aria-label="Help Sections">
+      <button class="tab-pill active" role="tab" aria-selected="true" data-help-tab="steps">📋 Step-by-Step</button>
+      <button class="tab-pill" role="tab" aria-selected="false" data-help-tab="flow">🔄 Workflow</button>
+      <button class="tab-pill" role="tab" aria-selected="false" data-help-tab="faq">❓ FAQ</button>
+    </div>
+
+    <!-- Step-by-Step Guide -->
+    <div class="help-panel active" id="help-steps">
+      <h3>Step-by-Step Guide</h3>
+      <p class="help-muted">Follow these steps to master your learning with KnowLedge:</p>
+
+      <details class="help-details" open id="step-1">
+        <summary><span class="step-number">1</span> Add Learning Content</summary>
+        <div class="step-content">
+          <p>
+            Start on <strong>My Ledger</strong> and paste your study material (notes, code snippets, formulas, or AI-generated explanations).
+            Click <strong>Tag concepts</strong> to scan for key ideas.
+          </p>
+          <ul class="step-list">
+            <li>Copy/paste text into the input area</li>
+            <li>Click "Tag concepts" button</li>
+            <li>Scout analyzes and extracts important ideas</li>
+          </ul>
+        </div>
+      </details>
+
+      <details class="help-details" id="step-2">
+        <summary><span class="step-number">2</span> Review Your Ledger</summary>
+        <div class="step-content">
+          <p>
+            Your dashboard displays all tracked concepts with their current status:
+          </p>
+          <ul class="step-list">
+            <li><strong style="color: #C94A3A;">On Loan</strong> — You haven't truly mastered this yet</li>
+            <li><strong style="color: #0E7A6E;">Clear</strong> — You've demonstrated understanding</li>
+            <li><strong style="color: #D4820A;">Persists</strong> — Concept needs further review</li>
+          </ul>
+          <p>Start with concepts marked <strong>On Loan</strong>—these are your priority for mastery.</p>
+        </div>
+      </details>
+
+      <details class="help-details" id="step-3">
+        <summary><span class="step-number">3</span> Clear with Sage</summary>
+        <div class="step-content">
+          <p>
+            Click any concept to open a dialogue with Sage, an AI mentor. You'll explain the concept in your own words.
+            Sage evaluates your response and either:
+          </p>
+          <ul class="step-list">
+            <li><strong>Confirms mastery</strong> — Concept updates to <strong>Clear</strong> ✓</li>
+            <li><strong>Guides further</strong> — Ask follow-up questions to deepen understanding</li>
+          </ul>
+          <p>This forces active learning instead of passive memorization.</p>
+        </div>
+      </details>
+
+      <details class="help-details" id="step-4">
+        <summary><span class="step-number">4</span> Verify with Lens (Optional)</summary>
+        <div class="step-content">
+          <p>
+            Use Lens to validate your understanding through multimodal feedback:
+          </p>
+          <ul class="step-list">
+            <li>Upload a photo of handwritten solutions</li>
+            <li>Lens analyzes your reasoning visually</li>
+            <li>Identifies gaps and mistakes with feedback</li>
+            <li>Concept may move to <strong>Persists</strong> for revisiting</li>
+          </ul>
+        </div>
+      </details>
+
+      <details class="help-details" id="step-5">
+        <summary><span class="step-number">5</span> Track Your Progress</summary>
+        <div class="step-content">
+          <p>
+            Monitor your learning journey with data-driven insights:
+          </p>
+          <ul class="step-list">
+            <li><strong>Progress</strong> — View trend charts and weekly concept movement</li>
+            <li><strong>Reports</strong> — Instructors can see aggregate class learning patterns</li>
+          </ul>
+          <p>Celebrate milestones as you clear concepts and build true mastery!</p>
+        </div>
+      </details>
+    </div>
+
+    <!-- Workflow Diagram -->
+    <div class="help-panel" id="help-flow">
+      <h3>User Workflow Flowchart</h3>
+      <p class="help-muted">This diagram shows the complete concept lifecycle and user journey in KnowLedge:</p>
+
+      <div class="flowchart-wrap">
+        <div class="mermaid">
+          graph TD
+            A["👤 Open My Ledger"] -->|Paste Content| B["📝 Add Learning Material"]
+            B -->|Click Tag| C["⚡ Scout Detection"]
+            C -->|Logs to DB| D["📊 Ledger Updated"]
+            
+            D -->|Ready to Learn?| E{Choose Path}
+            E -->|Study Now| F["🦉 Sage Session"]
+            E -->|Later| G["📈 Progress Page"]
+            
+            F -->|Explain Concept| H{Mastery Achieved?}
+            H -->|Yes| I["✅ Concept Cleared"]
+            H -->|Not Yet| J["🔄 Continue Dialogue"]
+            J -->|Further| H
+            
+            I -->|Optional| K["🔬 Lens Verification"]
+            K -->|Gap Found| L["⚠️ Status: Persists"]
+            K -->|Confirmed| M["🎉 Mastery Verified"]
+            
+            L -->|Revisit| F
+            M -->|Next Concept| D
+            G -->|Back to Learn| D
+            
+            classDef success fill:#D6F0EC,stroke:#0E7A6E,color:#1C1A14
+            classDef detection fill:#FDF3DC,stroke:#D4820A,color:#1C1A14
+            classDef warning fill:#FDECEA,stroke:#C94A3A,color:#1C1A14
+            
+            class A,F,I,M success
+            class C detection
+            class L warning
+        </div>
+      </div>
+
+      <p class="help-muted" style="margin-top: 20px;">
+        <strong>Color Legend:</strong> 
+        <span style="display: inline-block; width: 12px; height: 12px; background: #D6F0EC; border: 1px solid #0E7A6E; margin: 0 4px; vertical-align: middle;"></span> Clear Path
+        <span style="display: inline-block; width: 12px; height: 12px; background: #FDF3DC; border: 1px solid #D4820A; margin: 0 4px; vertical-align: middle;"></span> Scout Tagging
+        <span style="display: inline-block; width: 12px; height: 12px; background: #FDECEA; border: 1px solid #C94A3A; margin: 0 4px; vertical-align: middle;"></span> Needs Review
+      </p>
+    </div>
+
+    <!-- FAQ Section -->
+    <div class="help-panel" id="help-faq">
+      <h3>Frequently Asked Questions</h3>
+      <p class="help-muted">Search or browse common questions below:</p>
+      <input id="faqSearch" class="faq-search" type="text" placeholder="Search help topics (e.g., 'clear', 'lens', 'status')">
+
+      <div id="faqList">
+        <details class="help-details faq-item" data-keywords="on loan status concept explained">
+          <summary>What does "On Loan" mean?</summary>
+          <p>
+            "On Loan" means you've pasted or referenced this concept, but you haven't yet proven you truly understand it. 
+            It's called "borrowed" understanding—you took it from a source without making it your own. Your mission is to clear it.
+          </p>
+        </details>
+
+        <details class="help-details faq-item" data-keywords="clear mastery verification sage">
+          <summary>How does a concept become "Clear"?</summary>
+          <p>
+            A concept becomes "Clear" when you explain it in your own words during a Sage session and Sage confirms you've demonstrated mastery. 
+            This proves you've moved from passive understanding to owned knowledge.
+          </p>
+        </details>
+
+        <details class="help-details faq-item" data-keywords="persists repeated gaps lens">
+          <summary>What is "Persists" status?</summary>
+          <p>
+            "Persists" indicates a concept where gaps were found during Lens verification (handwritten solution analysis). 
+            It signals that despite claiming mastery, your logic may have holes. Revisit with Sage to strengthen understanding.
+          </p>
+        </details>
+
+        <details class="help-details faq-item" data-keywords="sage socratic dialogue ai mentor">
+          <summary>How does Sage work?</summary>
+          <p>
+            Sage is an offline AI mentor that guides you through a Socratic clearing process. Instead of giving answers, 
+            it asks probing questions to help you discover the concept yourself. This active learning method builds deeper understanding.
+          </p>
+        </details>
+
+        <details class="help-details faq-item" data-keywords="lens vision handwritten solutions feedback">
+          <summary>What is Lens and how do I use it?</summary>
+          <p>
+            Lens is a visual verification tool. You upload a photo of your handwritten solution or diagram, 
+            and it analyzes your reasoning using AI. It identifies gaps in logic with visual feedback and suggestions.
+          </p>
+        </details>
+
+        <details class="help-details faq-item" data-keywords="scout tagging automatic detection concepts">
+          <summary>How does Scout tag concepts automatically?</summary>
+          <p>
+            When you paste content, Scout uses AI to identify key concepts and terms. 
+            It learns from your course materials and syllabus to recognize important ideas relevant to your studies.
+          </p>
+        </details>
+
+        <details class="help-details faq-item" data-keywords="ledger dashboard tracking progress statistics">
+          <summary>What is My Ledger?</summary>
+          <p>
+            My Ledger is your personal learning dashboard. It displays all tracked concepts with their statuses, 
+            confidence levels, and timestamps. It's the central hub for managing your learning debt and tracking progress.
+          </p>
+        </details>
+
+        <details class="help-details faq-item" data-keywords="solo mode learning practice">
+          <summary>What is Solo Mode?</summary>
+          <p>
+            Solo Mode provides a focused, distraction-free environment for deep learning. 
+            You can practice clearing concepts without the full dashboard interface.
+          </p>
+        </details>
+
+        <details class="help-details faq-item" data-keywords="progress trends statistics learning patterns">
+          <summary>How do I view my progress?</summary>
+          <p>
+            Go to the <strong>Progress</strong> page to see:
+          </p>
+          <ul>
+            <li>Weekly trend charts showing concept movement</li>
+            <li>Statistics on cleared vs. pending concepts</li>
+            <li>Your learning velocity and growth over time</li>
+          </ul>
+        </details>
+
+        <details class="help-details faq-item" data-keywords="reports instructor class analytics">
+          <summary>What about instructor Reports?</summary>
+          <p>
+            <strong>Reports</strong> provides instructors with aggregate class-level insights:
+          </p>
+          <ul>
+            <li>Which concepts are challenging for students</li>
+            <li>Class-wide progress trends</li>
+            <li>Recommended focus areas for instruction</li>
+          </ul>
+        </details>
+
+        <details class="help-details faq-item" data-keywords="privacy offline data security local">
+          <summary>Is my data private?</summary>
+          <p>
+            Yes. KnowLedge is designed to run entirely offline on your device. Your concept tracking, 
+            responses, and learning data never leave your computer. All processing happens locally.
+          </p>
+        </details>
+
+        <details class="help-details faq-item" data-keywords="refresh update sync data">
+          <summary>How do I refresh my dashboard?</summary>
+          <p>
+            Use the <strong>Refresh Data</strong> button on My Ledger to sync the latest concept statuses. 
+            This fetches updated information from your local database.
+          </p>
+        </details>
+
+        <details class="help-details faq-item" data-keywords="get help support contact feedback">
+          <summary>I have more questions. How do I get help?</summary>
+          <p>
+            Use the floating help button (? in the bottom-right) to access this Help Center from any page. 
+            If you're stuck, check the FAQ section or revisit the Step-by-Step guide for your specific question.
+          </p>
+        </details>
+      </div>
+      <p id="faqEmpty" class="help-muted hidden">No matching help topic found. Try different keywords.</p>
+    </div>
+  </section>
+
+  <!-- Getting Started Tips -->
+  <section class="help-tips">
+    <h3>💡 Tips for Success</h3>
+    <div class="tips-grid">
+      <div class="tip-card">
+        <div class="tip-number">1</div>
+        <h4>Start Fresh</h4>
+        <p>Begin by pasting today's notes or the concept that confused you most. Scout will extract the key ideas.</p>
+      </div>
+      <div class="tip-card">
+        <div class="tip-number">2</div>
+        <h4>Be Honest</h4>
+        <p>During Sage sessions, explain concepts genuinely. Sage is here to help, not judge. Deeper questions mean deeper learning.</p>
+      </div>
+      <div class="tip-card">
+        <div class="tip-number">3</div>
+        <h4>Review Regularly</h4>
+        <p>Check your Progress page weekly. Watch your "Clear" count grow as you master concepts over time.</p>
+      </div>
+      <div class="tip-card">
+        <div class="tip-number">4</div>
+        <h4>Use Lens Wisely</h4>
+        <p>Upload handwritten work to verify deep understanding. A "Persists" flag is a gift—it shows where to focus.</p>
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<script>
+  // Hide floating help button on help page
+  const helpBtn = document.querySelector('.floating-help-btn');
+  if (helpBtn) {
+    helpBtn.style.display = 'none';
+  }
+
+  // Initialize Mermaid
+  mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+  mermaid.contentLoaded();
+
+  // Tab switching functionality
+  const tabs = document.querySelectorAll('[data-help-tab]');
+  const panels = {
+    steps: document.getElementById('help-steps'),
+    flow: document.getElementById('help-flow'),
+    faq: document.getElementById('help-faq')
+  };
+
+  tabs.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.helpTab;
+      
+      // Update tab buttons
+      tabs.forEach(t => {
+        t.classList.remove('active');
+        t.setAttribute('aria-selected', 'false');
+      });
+      
+      // Update panels
+      Object.values(panels).forEach(p => p.classList.remove('active'));
+      
+      // Activate selected
+      btn.classList.add('active');
+      btn.setAttribute('aria-selected', 'true');
+      panels[key].classList.add('active');
+      
+      // Trigger Mermaid re-render if flow tab opened
+      if (key === 'flow') {
+        setTimeout(() => {
+          mermaid.contentLoaded();
+        }, 100);
+      }
+    });
+  });
+
+  // FAQ Search Functionality
+  const faqSearch = document.getElementById('faqSearch');
+  const faqItems = Array.from(document.querySelectorAll('.faq-item'));
+  const faqEmpty = document.getElementById('faqEmpty');
+
+  faqSearch.addEventListener('input', (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    let shown = 0;
+    
+    faqItems.forEach(item => {
+      const text = (item.textContent + ' ' + item.dataset.keywords).toLowerCase();
+      const match = !q || text.includes(q);
+      item.style.display = match ? '' : 'none';
+      if (match) shown += 1;
+    });
+    
+    faqEmpty.classList.toggle('hidden', shown !== 0);
+  });
+</script>
+{% endblock %}

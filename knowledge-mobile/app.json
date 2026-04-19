@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "KnowLedge Mobile",
+    "slug": "knowledge-mobile",
+    "scheme": "knowledgemobile",
+    "plugins": [
+      "expo-router"
+    ],
+    "android": {
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "ACCESS_WIFI_STATE"
+      ],
+      "minSdkVersion": 24,
+      "package": "edu.knowledge.mobile"
+    },
+    "ios": {
+      "bundleIdentifier": "edu.knowledge.mobile",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Lens uses your camera to verify handwritten work",
+        "NSMicrophoneUsageDescription": "Sage uses your microphone for voice responses"
+      }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "replace-with-your-eas-project-id"
+      }
+    }
+  }
+}

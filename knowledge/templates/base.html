@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}KnowLedge{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&family=Playfair+Display:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/knowledge.css">
+{% block head %}{% endblock %}
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="logo-area">
+      <div class="logo-mark">K</div>
+      <div class="logo-text-group">
+        <div class="logo-wordmark">KnowLedge</div>
+        <div class="logo-subtitle">Learning Ledger</div>
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">Student</div>
+      <a class="nav-item {% if '/ledger' in request.url.path %}active{% endif %}" href="/ledger">
+        <span>📖</span> My Ledger
+      </a>
+      <a class="nav-item {% if '/progress' in request.url.path %}active{% endif %}" href="/progress">
+        <span>📈</span> Progress <span class="nav-badge">new</span>
+      </a>
+      <a class="nav-item" onclick="openSoloMode()">
+        <span>🧘</span> Solo Mode
+      </a>
+      <a class="nav-item" onclick="startSoloAssessment()">
+        <span>🎯</span> Solo Assessment
+      </a>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">Instructor</div>
+      <a class="nav-item {% if '/reports' in request.url.path %}active{% endif %}" href="/reports">
+        <span>📊</span> Reports
+      </a>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="scout-status">
+        <div class="status-dot"></div>
+        <span>Scout is watching</span>
+      </div>
+      <div class="offline-label">offline · all data on device</div>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <header class="topbar">
+      <div class="top-left">
+        <h1 id="page-title">{% block topbar_title %}Your Learning Ledger{% endblock %}</h1>
+        <p id="page-sub">{% block topbar_sub %}Today · Data Structures & Algorithms{% endblock %}</p>
+      </div>
+      <div class="top-right">
+        {% block topbar_actions %}
+        <button class="btn-primary" onclick="openSoloMode()">🧘 Solo Mode</button>
+        {% endblock %}
+      </div>
+    </header>
+
+    <div class="content">
+      {% block content %}{% endblock %}
+    </div>
+
+  </main>
+
+  <!-- Floating Help Button -->
+  <a href="/help" class="floating-help-btn" title="Help">
+    <span class="help-icon">?</span>
+  </a>
+
+  <!-- Sage Modal (Shared) -->
+  <div class="modal-backdrop" id="sageModal" onclick="closeModal(event)">
+    <div class="modal-card" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div class="sage-avatar">🦉</div>
+        <div class="modal-titles">
+          <h2>Sage — Clearing Session</h2>
+          <p id="modalConceptName">Concept</p>
+        </div>
+        <div class="close-btn" onclick="closeModalBtn()">✕</div>
+      </div>
+      
+      <div class="modal-body" id="modalBody">
+        <div class="bubble sage" id="sageQuestion">
+          Let's talk about it.
+        </div>
+      </div>
+
+      <div class="modal-input-row">
+        <input type="text" class="modal-input" id="modalInput" placeholder="Explain it in your own words..." onkeypress="handleModalEnter(event)">
+        <button class="modal-send" onclick="sendModalReply()">Send &rarr;</button>
+      </div>
+      
+      <div class="modal-footer">
+        <div>Session powered by Sage · Gemma 4 E4B · offline</div>
+        <div class="success-label" id="modalSuccess">✓ Concept owned!</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toasts -->
+  <div id="toast-container"></div>
+
+  <script>
+    // Shared Global JS
+    function showToast(icon, title, sub) {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      toast.innerHTML = `<div class="toast-icon">${icon}</div><div class="toast-content"><h5>${title}</h5><p>${sub}</p></div>`;
+      container.appendChild(toast);
+      setTimeout(() => { toast.classList.add('hide'); setTimeout(() => toast.remove(), 300); }, 3500);
+    }
+
+    // ── Solo Mode ─────────────────────────────────────────────────────────────
+    let soloModeActive = sessionStorage.getItem('soloMode') === 'true';
+
+    function applySoloMode(active) {
+      soloModeActive = active;
+      sessionStorage.setItem('soloMode', active);
+
+      // Banner
+      let banner = document.getElementById('solo-banner');
+      if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'solo-banner';
+        banner.style.cssText = [
+          'position:fixed','top:0','left:0','right:0','z-index:9999',
+          'background:var(--ink)','color:white','padding:10px 24px',
+          'display:flex','align-items:center','justify-content:space-between',
+          'font-family:DM Mono,monospace','font-size:12px','gap:12px',
+        ].join(';');
+        banner.innerHTML = `
+          <span>🧘 <strong>Solo Mode</strong> — Scout is paused. No AI assistance will be logged.</span>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button onclick="startSoloAssessment()" style="background:#fff;color:var(--ink);border:none;
+              padding:4px 14px;border-radius:6px;cursor:pointer;font-family:inherit;font-size:11px;">
+              Start Assessment
+            </button>
+            <button onclick="toggleSoloMode()" style="background:var(--amber);color:var(--ink);border:none;
+              padding:4px 14px;border-radius:6px;cursor:pointer;font-family:inherit;font-size:11px;">
+              Exit Solo Mode
+            </button>
+          </div>`;
+        document.body.prepend(banner);
+      }
+      banner.style.display = active ? 'flex' : 'none';
+
+      // Disable Scout + Lens panels
+      document.querySelectorAll('.panel-card').forEach(panel => {
+        if (active) {
+          if (!panel.querySelector('.solo-overlay')) {
+            const overlay = document.createElement('div');
+            overlay.className = 'solo-overlay';
+            overlay.style.cssText = [
+              'position:absolute','inset:0','background:rgba(245,240,232,0.85)',
+              'border-radius:inherit','display:flex','align-items:center',
+              'justify-content:center','z-index:10','font-size:12px',
+              'color:var(--ink-muted)','font-family:DM Mono,monospace',
+            ].join(';');
+            overlay.textContent = '🧘 Solo Mode — AI tools paused';
+            panel.style.position = 'relative';
+            panel.appendChild(overlay);
+          }
+        } else {
+          panel.querySelectorAll('.solo-overlay').forEach(o => o.remove());
+        }
+      });
+
+      // Sidebar status dot
+      const dot = document.querySelector('.status-dot');
+      const statusLabel = document.querySelector('.scout-status span');
+      if (dot) dot.style.background = active ? '#9ca3af' : '';
+      if (statusLabel) statusLabel.textContent = active ? 'Solo Mode — paused' : 'Scout is watching';
+    }
+
+    function toggleSoloMode() {
+      applySoloMode(!soloModeActive);
+      if (soloModeActive) showToast('🧘', 'Solo Mode activated', 'Scout is paused. No AI assistance.');
+      else showToast('⚡', 'Solo Mode off', 'Scout is watching again.');
+    }
+
+    function openSoloMode() { toggleSoloMode(); }
+
+    async function startSoloAssessment() {
+      try {
+        if (!soloModeActive) applySoloMode(true);
+        const concept = (window.prompt('Enter the concept to assess in Solo Mode:') || '').trim();
+        if (!concept) {
+          showToast('⚠️', 'Missing concept', 'Please enter a concept first.');
+          return;
+        }
+
+        const startRes = await fetch('/api/sage/start-solo', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({concept})
+        });
+        if (!startRes.ok) throw new Error('Unable to start solo session.');
+        const startData = await startRes.json();
+
+        const answer = (window.prompt(`Solo Question:\n\n${startData.question}\n\nType your answer:`) || '').trim();
+        if (!answer) {
+          showToast('⚠️', 'No response submitted', 'Solo assessment canceled.');
+          return;
+        }
+
+        const evalRes = await fetch('/api/sage/solo-evaluate', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            concept,
+            session_id: startData.session_id,
+            response: answer,
+          })
+        });
+        if (!evalRes.ok) throw new Error('Unable to evaluate response.');
+        const result = await evalRes.json();
+        const score = result?.evaluation?.score ?? 0;
+        if (result.passed) {
+          showToast('✅', 'Solo assessment passed', `Score: ${score}. Concept is now clear.`);
+        } else {
+          showToast('⚠️', 'Solo assessment incomplete', `Score: ${score}. Review gaps and retry.`);
+        }
+        if (typeof fetchState === 'function') fetchState();
+      } catch (e) {
+        showToast('❌', 'Solo Mode error', e?.message || 'Could not complete solo assessment.');
+      }
+    }
+
+    // Restore Solo Mode state on page load
+    if (soloModeActive) applySoloMode(true);
+
+    // Modal Shared Logic
+    let currentModalConcept = "";
+    let currentChatHistory = [];
+
+    function openModal(concept) {
+      currentModalConcept = concept;
+      currentChatHistory = [];
+      document.getElementById('modalConceptName').innerText = concept;
+      const body = document.getElementById('modalBody');
+      body.innerHTML = `<div class="bubble sage" id="sageQuestion">Let's talk about ${concept}. Explain it to me.</div>`;
+      document.getElementById('modalInput').value = '';
+      document.getElementById('modalSuccess').classList.remove('visible');
+      document.getElementById('sageModal').classList.add('open');
+      setTimeout(() => document.getElementById('modalInput').focus(), 300);
+    }
+
+    function closeModal(e) {
+      if(e.target === document.getElementById('sageModal')) closeModalBtn();
+    }
+    function closeModalBtn() {
+      document.getElementById('sageModal').classList.remove('open');
+      if (typeof fetchState === "function") fetchState();
+    }
+    function handleModalEnter(e) {
+      if (e.key === 'Enter') sendModalReply();
+    }
+
+    let currentSessionId = "local-" + Date.now(); // ephemeral session for ledger SSE calls
+
+    async function sendModalReply() {
+      const input = document.getElementById('modalInput');
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      input.disabled = true;
+      document.querySelector('.modal-send').disabled = true;
+
+      const body = document.getElementById('modalBody');
+      body.innerHTML += `<div class="bubble student visible">${text}</div>`;
+      body.scrollTop = body.scrollHeight;
+
+      currentChatHistory.push({role: "user", content: text});
+
+      // Create typing bubble — tokens stream into it
+      const bubbleId = "sage-" + Date.now();
+      body.innerHTML += `<div class="bubble sage streaming" id="${bubbleId}"></div>`;
+      body.scrollTop = body.scrollHeight;
+      const bubble = document.getElementById(bubbleId);
+
+      const historyEncoded = encodeURIComponent(JSON.stringify(currentChatHistory));
+      const conceptEncoded = encodeURIComponent(currentModalConcept);
+      const url = `/api/sage/stream?session_id=${currentSessionId}&concept=${conceptEncoded}&history=${historyEncoded}`;
+
+      let fullReply = "";
+      let cleared = false;
+
+      try {
+        const es = new EventSource(url);
+
+        es.onmessage = (e) => {
+          const data = JSON.parse(e.data);
+          if (data.token !== undefined) {
+            fullReply += data.token;
+            bubble.textContent = fullReply;
+            bubble.classList.remove('streaming');
+            body.scrollTop = body.scrollHeight;
+          }
+          if (data.status === "cleared") {
+            cleared = true;
+            es.close();
+            finishReply(fullReply, cleared);
+          } else if (data.status === "complete") {
+            es.close();
+            finishReply(fullReply, cleared);
+          }
+        };
+
+        es.onerror = () => {
+          es.close();
+          if (!fullReply) bubble.textContent = "Error connecting to Sage.";
+          else finishReply(fullReply, false);
+        };
+
+      } catch(e) {
+        bubble.textContent = "Error connecting to Sage.";
+        input.disabled = false;
+        document.querySelector('.modal-send').disabled = false;
+      }
+
+      function finishReply(reply, wasCleared) {
+        currentChatHistory.push({role: "assistant", content: reply});
+        input.disabled = false;
+        document.querySelector('.modal-send').disabled = false;
+        input.focus();
+
+        if (wasCleared) {
+          document.getElementById('modalSuccess').classList.add('visible');
+          showToast('🎉', 'Concept Owned!', 'Sage has verified your understanding.');
+          // Mark concept as owned in the backend
+          fetch('/api/sage/mark-owned', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({concept: currentModalConcept})
+          })
+          .then(() => { if (typeof fetchState === "function") fetchState(); })
+          .catch(() => {});
+          setTimeout(() => closeModalBtn(), 2500);
+        }
+      }
+    }
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

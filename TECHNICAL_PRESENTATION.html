@@ -1,0 +1,996 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KnowLedge: Technical Architecture & Implementation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --ink: #1C1A14;
+            --ink-light: #3D3A2E;
+            --ink-muted: #7A7565;
+            --cream: #F5F0E8;
+            --cream-deep: #EDE7D9;
+            --amber: #D4820A;
+            --teal: #0E7A6E;
+            --teal-light: #D6F0EC;
+            --coral: #C94A3A;
+            --shadow: 0 4px 12px rgba(28, 26, 20, 0.08);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, sans-serif;
+            line-height: 1.6;
+            color: var(--ink);
+            background: var(--cream);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* Header */
+        header {
+            background: linear-gradient(135deg, var(--ink) 0%, var(--ink-light) 100%);
+            color: white;
+            padding: 60px 20px;
+            text-align: center;
+            box-shadow: var(--shadow);
+        }
+
+        header h1 {
+            font-size: 3em;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            font-size: 1.3em;
+            opacity: 0.9;
+        }
+
+        /* Navigation */
+        nav {
+            position: sticky;
+            top: 0;
+            background: white;
+            border-bottom: 2px solid var(--cream-deep);
+            z-index: 100;
+            box-shadow: var(--shadow);
+        }
+
+        nav ul {
+            list-style: none;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 0;
+            padding: 0;
+            margin: 0;
+        }
+
+        nav li {
+            flex: 1;
+            min-width: 150px;
+            text-align: center;
+        }
+
+        nav a {
+            display: block;
+            padding: 15px 20px;
+            color: var(--ink);
+            text-decoration: none;
+            font-weight: 500;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        nav a:hover {
+            background: var(--cream);
+            border-bottom-color: var(--amber);
+            color: var(--amber);
+        }
+
+        /* Main Content */
+        main {
+            padding: 40px 0;
+        }
+
+        section {
+            background: white;
+            margin: 30px 0;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            scroll-margin-top: 80px;
+        }
+
+        section h2 {
+            font-size: 2.2em;
+            color: var(--ink);
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 3px solid var(--amber);
+        }
+
+        section h3 {
+            font-size: 1.6em;
+            color: var(--ink-light);
+            margin-top: 25px;
+            margin-bottom: 15px;
+        }
+
+        section h4 {
+            font-size: 1.3em;
+            color: var(--teal);
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+
+        p {
+            margin-bottom: 15px;
+            color: var(--ink-light);
+            line-height: 1.8;
+        }
+
+        /* Lists */
+        ul, ol {
+            margin: 15px 0 15px 40px;
+            color: var(--ink-light);
+        }
+
+        li {
+            margin-bottom: 10px;
+            line-height: 1.7;
+        }
+
+        /* Code Blocks */
+        pre {
+            background: #f5f5f5;
+            border-left: 4px solid var(--teal);
+            padding: 15px;
+            margin: 20px 0;
+            overflow-x: auto;
+            border-radius: 6px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.9em;
+        }
+
+        code {
+            font-family: 'Monaco', 'Menlo', monospace;
+            background: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+
+        pre code {
+            background: none;
+            padding: 0;
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+
+        th {
+            background: var(--teal);
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid var(--cream-deep);
+        }
+
+        tr:hover {
+            background: var(--cream);
+        }
+
+        /* Callouts */
+        .callout {
+            border-left: 4px solid var(--amber);
+            background: rgba(212, 130, 10, 0.05);
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 6px;
+        }
+
+        .callout.warning {
+            border-left-color: var(--coral);
+            background: rgba(201, 74, 58, 0.05);
+        }
+
+        .callout.success {
+            border-left-color: var(--teal);
+            background: rgba(14, 122, 110, 0.05);
+        }
+
+        .callout strong {
+            display: block;
+            margin-bottom: 5px;
+            color: var(--ink);
+        }
+
+        /* Diagram/Architecture */
+        .diagram {
+            background: #f9f9f9;
+            border: 2px dashed var(--amber);
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            font-family: monospace;
+            overflow-x: auto;
+            color: var(--ink-muted);
+            line-height: 1.5;
+        }
+
+        /* Cards */
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .card {
+            background: var(--cream);
+            border: 1px solid var(--cream-deep);
+            padding: 20px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            box-shadow: var(--shadow);
+            transform: translateY(-2px);
+        }
+
+        .card h4 {
+            margin-top: 0;
+            color: var(--amber);
+        }
+
+        .card p {
+            margin-bottom: 0;
+            font-size: 0.95em;
+            color: var(--ink-muted);
+        }
+
+        /* Footer */
+        footer {
+            background: var(--ink);
+            color: white;
+            text-align: center;
+            padding: 30px 20px;
+            margin-top: 60px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 2em;
+            }
+
+            section {
+                padding: 20px;
+            }
+
+            section h2 {
+                font-size: 1.8em;
+            }
+
+            nav ul {
+                flex-wrap: wrap;
+            }
+
+            nav a {
+                padding: 10px 15px;
+                font-size: 0.9em;
+            }
+        }
+
+        /* Print styles */
+        @media print {
+            nav {
+                display: none;
+            }
+
+            section {
+                page-break-inside: avoid;
+                box-shadow: none;
+                border: 1px solid #ccc;
+            }
+        }
+
+        /* Anchor links */
+        a {
+            color: var(--teal);
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        .back-to-top {
+            display: none;
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            background: var(--amber);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: var(--shadow);
+            z-index: 99;
+        }
+
+        .back-to-top.show {
+            display: block;
+        }
+
+        .back-to-top:hover {
+            background: #c26f09;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="container">
+        <h1>🎓 KnowLedge</h1>
+        <p>Technical Architecture & Implementation Guide</p>
+    </div>
+</header>
+
+<nav>
+    <ul>
+        <li><a href="#overview">Overview</a></li>
+        <li><a href="#tech-stack">Tech Stack</a></li>
+        <li><a href="#components">Components</a></li>
+        <li><a href="#dataflow">Data Flow</a></li>
+        <li><a href="#frontend">Frontend</a></li>
+        <li><a href="#backend">Backend</a></li>
+        <li><a href="#database">Database</a></li>
+        <li><a href="#deployment">Deployment</a></li>
+    </ul>
+</nav>
+
+<main class="container">
+
+    <section id="overview">
+        <h2>📋 System Architecture Overview</h2>
+        
+        <h3>What is KnowLedge?</h3>
+        <p>KnowLedge is a <strong>Comprehension Debt Tracker (CDT)</strong> that addresses AI-induced over-reliance in education by tracking, measuring, and systematically clearing "comprehension debt"—concepts students passively copy without truly understanding.</p>
+
+        <h3>Core Philosophy</h3>
+        <p>Instead of instantly answering questions (traditional AI tutoring), KnowLedge:</p>
+        <ul>
+            <li><strong>Detects</strong> borrowed concepts automatically (Scout)</li>
+            <li><strong>Tracks</strong> learning debt across a personal ledger</li>
+            <li><strong>Guides</strong> students through Socratic clearing (Sage)</li>
+            <li><strong>Verifies</strong> true mastery via multimodal assessment (Lens)</li>
+        </ul>
+
+        <h3>System Architecture Layers</h3>
+        <div class="diagram">
+┌─────────────────────────────────────────────────┐
+│        User Interface Layer                      │
+│   (HTML/CSS/JavaScript Frontend + Jinja2)        │
+├─────────────────────────────────────────────────┤
+│      Application Server Layer                    │
+│   (FastAPI + Uvicorn + Orchestrator)             │
+├─────────────────────────────────────────────────┤
+│       Integration Layer                          │
+│ (Scout | Sage | Lens | RAG | Classroom)         │
+├─────────────────────────────────────────────────┤
+│        AI Model Layer                            │
+│    (Gemma-4 via Ollama - Offline)                │
+├─────────────────────────────────────────────────┤
+│      Persistence Layer                           │
+│ (SQLite + ChromaDB + File Storage)               │
+└─────────────────────────────────────────────────┘
+        </div>
+    </section>
+
+    <section id="tech-stack">
+        <h2>🛠️ Technology Stack</h2>
+
+        <h3>Backend Framework</h3>
+        <table>
+            <tr>
+                <th>Component</th>
+                <th>Technology</th>
+                <th>Purpose</th>
+            </tr>
+            <tr>
+                <td><strong>Web Framework</strong></td>
+                <td>FastAPI 0.100+</td>
+                <td>RESTful API, async request handling</td>
+            </tr>
+            <tr>
+                <td><strong>ASGI Server</strong></td>
+                <td>Uvicorn</td>
+                <td>Production-grade async HTTP server</td>
+            </tr>
+            <tr>
+                <td><strong>Templating</strong></td>
+                <td>Jinja2</td>
+                <td>Server-side HTML rendering</td>
+            </tr>
+            <tr>
+                <td><strong>HTTP Client</strong></td>
+                <td>httpx</td>
+                <td>Async HTTP requests</td>
+            </tr>
+        </table>
+
+        <h3>Frontend Technologies</h3>
+        <table>
+            <tr>
+                <th>Component</th>
+                <th>Technology</th>
+                <th>Purpose</th>
+            </tr>
+            <tr>
+                <td><strong>Markup</strong></td>
+                <td>HTML5</td>
+                <td>Semantic structure</td>
+            </tr>
+            <tr>
+                <td><strong>Styling</strong></td>
+                <td>CSS3</td>
+                <td>Custom design system (no frameworks)</td>
+            </tr>
+            <tr>
+                <td><strong>Interactivity</strong></td>
+                <td>Vanilla JavaScript</td>
+                <td>Tab switching, modals, real-time updates</td>
+            </tr>
+            <tr>
+                <td><strong>Visualization</strong></td>
+                <td>Mermaid.js</td>
+                <td>Interactive flowcharts</td>
+            </tr>
+        </table>
+
+        <h3>AI/ML Stack</h3>
+        <table>
+            <tr>
+                <th>Component</th>
+                <th>Technology</th>
+                <th>Purpose</th>
+            </tr>
+            <tr>
+                <td><strong>LLM Runtime</strong></td>
+                <td>Ollama</td>
+                <td>Local, offline Gemma-4 execution</td>
+            </tr>
+            <tr>
+                <td><strong>Models</strong></td>
+                <td>Gemma-4-E2B, E4B</td>
+                <td>Concept extraction & reasoning</td>
+            </tr>
+            <tr>
+                <td><strong>Function Calling</strong></td>
+                <td>Native Ollama Tools</td>
+                <td>Structured extraction & decisions</td>
+            </tr>
+            <tr>
+                <td><strong>Vision Processing</strong></td>
+                <td>Gemma-4 Vision</td>
+                <td>Handwritten solution analysis</td>
+            </tr>
+        </table>
+
+        <h3>Data & Storage</h3>
+        <table>
+            <tr>
+                <th>Component</th>
+                <th>Technology</th>
+                <th>Purpose</th>
+            </tr>
+            <tr>
+                <td><strong>Relational DB</strong></td>
+                <td>SQLite3</td>
+                <td>Debt ledger, clearing history</td>
+            </tr>
+            <tr>
+                <td><strong>Vector Store</strong></td>
+                <td>ChromaDB</td>
+                <td>Syllabus embeddings for RAG</td>
+            </tr>
+            <tr>
+                <td><strong>PDF Processing</strong></td>
+                <td>pdfplumber</td>
+                <td>Syllabus text extraction</td>
+            </tr>
+            <tr>
+                <td><strong>Image Processing</strong></td>
+                <td>Pillow (PIL)</td>
+                <td>Image handling for vision</td>
+            </tr>
+        </table>
+    </section>
+
+    <section id="components">
+        <h2>🔧 Core Components</h2>
+
+        <h3>1. Scout (Concept Detection)</h3>
+        <p><strong>Role:</strong> Background behavioral intelligence agent that monitors student input and extracts key concepts.</p>
+        
+        <div class="callout success">
+            <strong>Key Features:</strong>
+            Uses Gemma-4-E2B with native function calling to extract concepts and assign confidence scores (0.0-1.0). Runs continuously in a background thread.
+        </div>
+
+        <pre><code>def tag_content(text: str) -> List[ConceptTag]:
+    """
+    Analyzes student input using gemma-4-E2B via Ollama.
+    Returns: [{'concept_tag': 'Binary Search', 'confidence': 0.95}, ...]
+    """</code></pre>
+
+        <h3>2. Sage (Socratic Clearing)</h3>
+        <p><strong>Role:</strong> Interactive dialogue agent that guides students through concept mastery using the Socratic method.</p>
+
+        <div class="callout success">
+            <strong>Key Features:</strong>
+            Uses Gemma-4-E4B with function calling. Asks probing questions, identifies gaps, and calls verify_comprehension when mastery is demonstrated.
+        </div>
+
+        <pre><code>def run_session(concept: str, chat_history: List[Dict]) -> ClearingResult:
+    """
+    Runs a Socratic dialogue turn using gemma-4-E4B.
+    Returns: {cleared: bool, response: str}
+    """</code></pre>
+
+        <h3>3. Lens (Vision Verification)</h3>
+        <p><strong>Role:</strong> Multimodal analysis agent that reviews handwritten solutions and provides visual feedback on reasoning gaps.</p>
+
+        <div class="callout success">
+            <strong>Key Features:</strong>
+            Analyzes images using Gemma-4 vision. Returns pixel coordinates of errors with explanations.
+        </div>
+
+        <pre><code>def verify_image(image_bytes: bytes, concept: str) -> ExaminerResult:
+    """
+    Analyzes handwritten work for concept understanding.
+    Returns: {x, y, width, height, explanation}
+    """</code></pre>
+
+        <h3>4. Orchestrator (Workflow Coordinator)</h3>
+        <p><strong>Role:</strong> Manages concurrent operations of Scout, Sage, and Lens with resource constraints.</p>
+
+        <div class="cards">
+            <div class="card">
+                <h4>Background Processing</h4>
+                <p>Scout runs in daemon thread while main app serves requests</p>
+            </div>
+            <div class="card">
+                <h4>Resource Management</h4>
+                <p>Mutex lock prevents simultaneous Sage + Lens execution in LOW_RAM mode</p>
+            </div>
+            <div class="card">
+                <h4>Event Bus</h4>
+                <p>Broadcasts events (DEBT_ADDED, CLEARING_COMPLETE) for UI updates</p>
+            </div>
+        </div>
+
+        <h3>5. RAG (Retrieval-Augmented Generation)</h3>
+        <p><strong>Role:</strong> Grounds Sage dialogue in syllabus content to prevent hallucinations.</p>
+
+        <div class="diagram">
+Syllabus PDF
+    ↓
+pdfplumber (extract text)
+    ↓
+Text chunking (500 chars, 100 char overlap)
+    ↓
+ChromaDB (vectorize + store)
+    ↓
+Query: retrieve top-3 chunks semantically similar to concept
+    ↓
+Inject into Sage system prompt
+        </div>
+    </section>
+
+    <section id="dataflow">
+        <h2>🔄 Data Flow</h2>
+
+        <h3>Concept Tracking (Scout)</h3>
+        <div class="diagram">
+Student Input
+    ↓
+POST /api/tag (Scout.tag_content)
+    ↓
+Gemma-4-E2B (Function Calling)
+    ↓
+[{concept_tag, confidence}]
+    ↓
+db.insert_debt() → status='on_loan'
+    ↓
+Event: DEBT_ADDED
+    ↓
+Dashboard reflects new concept
+        </div>
+
+        <h3>Clearing Session (Sage)</h3>
+        <div class="diagram">
+User clicks concept → Sage modal opens
+    ↓
+POST /api/sage (concept, chat_history)
+    ↓
+RAG.retrieve_context(concept)
+    ↓
+Gemma-4-E4B (Socratic Dialogue)
+    ↓
+Student explains concept
+    ↓
+LLM Decision:
+  ├─ Correct & Complete → verify_comprehension()
+  ├─ Incomplete → Ask probe
+  └─ Wrong → Point out gap
+    ↓
+IF cleared: db.update_debt_status("clear")
+    ↓
+Dashboard updates badge
+        </div>
+
+        <h3>Vision Verification (Lens)</h3>
+        <div class="diagram">
+User uploads handwritten image
+    ↓
+POST /api/lens (image, concept)
+    ↓
+Image validation & encoding
+    ↓
+Gemma-4-E4B Vision
+    ↓
+Output: {x, y, width, height, explanation}
+    ↓
+IF gaps found: db.update_debt_status("persists")
+    ↓
+Frontend renders feedback overlay with bounding box
+        </div>
+    </section>
+
+    <section id="frontend">
+        <h2>🎨 Frontend Architecture</h2>
+
+        <h3>Design Philosophy</h3>
+        <ul>
+            <li><strong>Vanilla HTML/CSS/JavaScript</strong> - No framework dependency, works offline</li>
+            <li><strong>No build step</strong> - Files served directly</li>
+            <li><strong>Responsive design</strong> - CSS Grid and Flexbox</li>
+            <li><strong>Accessible</strong> - ARIA labels, semantic HTML</li>
+        </ul>
+
+        <h3>Color System</h3>
+        <div class="cards">
+            <div class="card" style="background: #F5F0E8; border: 2px solid #D8CFBA;">
+                <h4>Cream #F5F0E8</h4>
+                <p>Primary background color</p>
+            </div>
+            <div class="card" style="background: #1C1A14; color: white;">
+                <h4>Ink #1C1A14</h4>
+                <p>Text and dark elements</p>
+            </div>
+            <div class="card" style="background: #D4820A; color: white;">
+                <h4>Amber #D4820A</h4>
+                <p>Primary action and CTAs</p>
+            </div>
+            <div class="card" style="background: #0E7A6E; color: white;">
+                <h4>Teal #0E7A6E</h4>
+                <p>Success states and accents</p>
+            </div>
+        </div>
+
+        <h3>Key Pages</h3>
+        <table>
+            <tr>
+                <th>Page</th>
+                <th>File</th>
+                <th>Purpose</th>
+            </tr>
+            <tr>
+                <td><strong>My Ledger</strong></td>
+                <td>ledger.html</td>
+                <td>Main dashboard showing tracked concepts</td>
+            </tr>
+            <tr>
+                <td><strong>Help Center</strong></td>
+                <td>help.html</td>
+                <td>Onboarding guide with Mermaid flowchart</td>
+            </tr>
+            <tr>
+                <td><strong>Progress</strong></td>
+                <td>progress.html</td>
+                <td>Learning analytics and trends</td>
+            </tr>
+            <tr>
+                <td><strong>Reports</strong></td>
+                <td>reports.html</td>
+                <td>Instructor view of class learning patterns</td>
+            </tr>
+        </table>
+
+        <div class="callout">
+            <strong>Floating Help Button:</strong> A prominent "?" button in the bottom-right (top-right on mobile) provides quick access to the Help Center from any page.
+        </div>
+    </section>
+
+    <section id="backend">
+        <h2>⚙️ Backend Architecture</h2>
+
+        <h3>FastAPI Application Structure</h3>
+        <pre><code>app = FastAPI(title="KnowLedge Backend")
+
+# Mount static files
+app.mount("/static", StaticFiles(...), name="static")
+
+# Mount Jinja2 templates
+templates = Jinja2Templates(directory="knowledge/templates")
+
+# Include routers
+app.include_router(progress.router)
+app.include_router(reports.router)
+app.include_router(ingest_router)
+app.include_router(classroom_router)
+
+# Initialize services
+db.init_db()
+orchestrator.start_scout_loop()</code></pre>
+
+        <h3>API Route Categories</h3>
+
+        <div class="cards">
+            <div class="card">
+                <h4>📄 Page Routes</h4>
+                <p><code>GET /ledger</code>, <code>GET /help</code>, <code>GET /progress</code><br><br>Server-side rendered HTML responses via Jinja2</p>
+            </div>
+            <div class="card">
+                <h4>🏷️ Scout Routes</h4>
+                <p><code>POST /api/scout/tag</code><br><br>Trigger concept extraction and debt logging</p>
+            </div>
+            <div class="card">
+                <h4>🦉 Sage Routes</h4>
+                <p><code>POST /api/sage/chat</code><br><br>Run Socratic clearing session (streaming support)</p>
+            </div>
+            <div class="card">
+                <h4>🔬 Lens Routes</h4>
+                <p><code>POST /api/lens/verify</code><br><br>Submit image for vision analysis</p>
+            </div>
+        </div>
+
+        <h3>Streaming Responses (Sage)</h3>
+        <p>For long-running dialogue, responses are streamed via Server-Sent Events (SSE) for real-time UI updates:</p>
+        <pre><code>@app.post("/api/sage/stream")
+async def sage_stream(request: SageRequest):
+    async def response_generator():
+        for chunk in run_sage_streaming(request.concept, request.chat_history):
+            yield f"data: {chunk}\n\n"
+    
+    return StreamingResponse(response_generator(), media_type="text/event-stream")</code></pre>
+
+        <h3>Model Integration (Ollama)</h3>
+        <pre><code>from . import config
+import ollama
+
+client = ollama.Client(host="http://localhost:11434")
+
+# Scout - Fast, lightweight
+scout_response = client.chat(
+    model=config.SCOUT_MODEL,  # "gemma4:e2b"
+    messages=[...]
+)
+
+# Sage - Reasoning, dialogue
+sage_response = client.chat(
+    model=config.SAGE_MODEL,   # "gemma4:e4b"
+    messages=[...],
+    tools=[...]  # Function calling tools
+)
+
+# Lens - Vision enabled
+lens_response = client.chat(
+    model=config.LENS_MODEL,   # "gemma4:e4b"
+    messages=[],
+    images=[base64_image]  # Base64 encoded image
+)</code></pre>
+    </section>
+
+    <section id="database">
+        <h2>💾 Database Schema</h2>
+
+        <h3>debt_log (Concept Tracking)</h3>
+        <pre><code>CREATE TABLE debt_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    concept TEXT NOT NULL,
+    source_text TEXT,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    confidence REAL,           -- 0.0-1.0 (Scout confidence)
+    status TEXT DEFAULT 'on_loan'  -- 'on_loan'|'clear'|'persists'
+);
+
+CREATE INDEX idx_concept ON debt_log(concept);
+CREATE INDEX idx_status ON debt_log(status);</code></pre>
+
+        <h3>clearing_history (Session Logs)</h3>
+        <pre><code>CREATE TABLE clearing_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    concept TEXT NOT NULL,
+    session_ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    result TEXT,              -- 'cleared'|'not_cleared'
+    notes TEXT                -- Sage feedback or Lens explanation
+);</code></pre>
+
+        <h3>Common Queries</h3>
+        <pre><code>-- Get all On Loan concepts
+SELECT concept, confidence, timestamp
+FROM debt_log
+WHERE status = 'on_loan'
+ORDER BY timestamp DESC;
+
+-- Weekly progress
+SELECT DATE(timestamp) as date,
+       SUM(CASE WHEN status = 'clear' THEN 1 ELSE 0 END) as cleared,
+       COUNT(*) as total
+FROM debt_log
+GROUP BY DATE(timestamp);</code></pre>
+    </section>
+
+    <section id="deployment">
+        <h2>🚀 Deployment & Configuration</h2>
+
+        <h3>Local Development Setup</h3>
+        <pre><code># 1. Clone and setup
+git clone https://github.com/Charan-suresh/Gemma4-CDT.git
+cd Gemma4-CDT
+python3 -m venv venv
+source venv/bin/activate
+
+# 2. Install dependencies
+pip install -r requirements.txt
+
+# 3. Start Ollama (Terminal 1)
+ollama serve
+
+# 4. Pull models (Terminal 2)
+ollama pull gemma:4-e2b
+ollama pull gemma:4-e4b
+
+# 5. Run application (Terminal 3)
+python3 -m uvicorn knowledge.main:app --reload --port 8000</code></pre>
+
+        <h3>Environment Configuration</h3>
+        <pre><code># Models
+SCOUT_MODEL=gemma4:e2b
+SAGE_MODEL=gemma4:e4b
+LENS_MODEL=gemma4:e4b
+
+# Database
+DB_PATH=./debt_log.db
+
+# Vector Store
+CHROMA_PATH=./cdt_vectorstore
+
+# Hardware (set FALSE for 16GB+ RAM)
+LOW_RAM=true
+
+# Google Classroom (optional)
+GOOGLE_CLIENT_ID=your_id
+GOOGLE_CLIENT_SECRET=your_secret</code></pre>
+
+        <h3>Production Deployment</h3>
+        <div class="callout">
+            <strong>Recommended Stack:</strong>
+            <ul>
+                <li>ASGI Server: Gunicorn with Uvicorn workers</li>
+                <li>Reverse Proxy: Nginx</li>
+                <li>TLS: Let's Encrypt</li>
+                <li>Database: SQLite or PostgreSQL</li>
+                <li>Container: Docker (optional)</li>
+            </ul>
+        </div>
+
+        <h3>Performance Optimization</h3>
+        <ul>
+            <li><strong>Background Processing:</strong> Scout runs in daemon thread, doesn't block requests</li>
+            <li><strong>Context Caching:</strong> RAG results cached with @lru_cache</li>
+            <li><strong>Low RAM Mode:</strong> Mutex lock prevents simultaneous heavy model execution</li>
+            <li><strong>Image Compression:</strong> Resize handwritten solutions before vision processing</li>
+        </ul>
+    </section>
+
+    <section id="conclusion">
+        <h2>✨ Key Takeaways</h2>
+
+        <div class="cards">
+            <div class="card">
+                <h4>🎯 Clear Mission</h4>
+                <p>Address AI-induced over-reliance through systematic debt tracking and verification</p>
+            </div>
+            <div class="card">
+                <h4>🔒 Privacy First</h4>
+                <p>100% offline execution. No cloud APIs. Data stays on device</p>
+            </div>
+            <div class="card">
+                <h4>⚡ Modern Stack</h4>
+                <p>FastAPI + Ollama + ChromaDB + Vanilla JS. No heavy frameworks</p>
+            </div>
+            <div class="card">
+                <h4>📊 Data-Driven</h4>
+                <p>SQLite ledger tracks every concept, clearing session, and verification</p>
+            </div>
+            <div class="card">
+                <h4>🧪 Scalable Design</h4>
+                <p>Orchestrator pattern allows flexible agent expansion and resource management</p>
+            </div>
+            <div class="card">
+                <h4>🎓 Pedagogically Sound</h4>
+                <p>Based on Socratic method, spaced repetition, and multimodal assessment</p>
+            </div>
+        </div>
+    </section>
+
+</main>
+
+<footer>
+    <p>&copy; 2026 KnowLedge Project. All rights reserved.</p>
+    <p>Technical Presentation • April 2026</p>
+</footer>
+
+<button class="back-to-top" onclick="scrollToTop()">↑</button>
+
+<script>
+    // Smooth scroll for navigation
+    document.querySelectorAll('nav a').forEach(link => {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            const target = document.querySelector(link.getAttribute('href'));
+            if (target) {
+                target.scrollIntoView({ behavior: 'smooth' });
+            }
+        });
+    });
+
+    // Back to top button
+    const backToTopBtn = document.querySelector('.back-to-top');
+    window.addEventListener('scroll', () => {
+        if (window.scrollY > 300) {
+            backToTopBtn.classList.add('show');
+        } else {
+            backToTopBtn.classList.remove('show');
+        }
+    });
+
+    function scrollToTop() {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+</script>
+
+</body>
+</html>

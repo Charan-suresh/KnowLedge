@@ -1,6 +1,6 @@
 import sys
 import os
-from rag import ingest_file
+from .rag import ingest_file
 
 def main():
     if len(sys.argv) < 2:

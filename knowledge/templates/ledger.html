@@ -1,0 +1,454 @@
+{% extends "base.html" %}
+
+{% block title %}Your Ledger · KnowLedge{% endblock %}
+{% block topbar_title %}Your Learning Ledger{% endblock %}
+
+{% block topbar_actions %}
+  <button class="btn-ghost" onclick="fetchState()">🔄 Refresh Data</button>
+  <button class="btn-ghost" onclick="openLlmSettings()">⚙️ LLM Settings</button>
+  <button class="btn-primary" onclick="openSoloMode()">🧘 Solo Mode</button>
+{% endblock %}
+
+{% block content %}
+<div class="stats-row">
+  <div class="stat-card amber">
+    <div class="stat-label">On Loan</div>
+    <div class="stat-val" id="stat-onloan">0</div>
+    <div class="stat-sub">concepts borrowed from AI</div>
+  </div>
+  <div class="stat-card teal">
+    <div class="stat-label">Clear</div>
+    <div class="stat-val" id="stat-owned">0</div>
+    <div class="stat-sub">cleared concepts</div>
+  </div>
+  <div class="stat-card coral">
+    <div class="stat-label">Persists</div>
+    <div class="stat-val" id="stat-persists">0</div>
+    <div class="stat-sub">needs another session</div>
+  </div>
+  <div class="stat-card ink">
+    <div class="stat-label">Debt Score</div>
+    <div class="stat-val" id="stat-debt-score">--%</div>
+    <div class="stat-sub" id="stat-debt-sub">calculating...</div>
+  </div>
+</div>
+
+<div class="grid-2col">
+  <!-- Left: Ledger -->
+  <div class="ledger-container">
+    <div class="section-header">
+      <h2>Concept Ledger</h2>
+      <span class="tag" id="ledger-tag">0 active</span>
+      <button class="btn-ghost filter-btn">Filter ▾</button>
+    </div>
+
+    <div class="ledger-card">
+      <div class="ledger-grid ledger-header">
+        <div>Concept</div>
+        <div>Status</div>
+        <div>Confidence</div>
+        <div>Last Seen</div>
+        <div></div>
+      </div>
+
+      <div id="ledger-body">
+        <!-- Dynamically populated from API/Jinja2 -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: Panels -->
+  <div class="panel-stack">
+    <div class="panel-card">
+      <div class="panel-header">
+        <span class="panel-title">New entry</span>
+        <span class="panel-badge" id="scout-model-badge">Scout · --</span>
+      </div>
+      <a class="help-inline" href="/help#step-track">Need help with tagging?</a>
+      <textarea id="scoutInput" class="paste-area" placeholder="Paste AI-generated code or explanations here... Scout will silently extract concepts."></textarea>
+      <div class="panel-footer">
+        <span class="panel-hint">⚡ Tagged instantly · stays on your device</span>
+        <button class="btn-dark" onclick="simulateTag()">Tag concepts</button>
+      </div>
+    </div>
+
+    <div class="panel-card camera-panel">
+      <div class="panel-header">
+        <span class="panel-title">🔬 Show your work to Lens</span>
+        <span class="panel-badge vision" id="lens-model-badge">Lens · --</span>
+      </div>
+      <div class="camera-box">
+        <input type="file" id="lensInput" accept="image/*" onchange="simulateLens()">
+        <span style="font-size: 28px; opacity: 0.4;">📷</span>
+        <p>Upload handwritten notes<br>or diagrams to verify.</p>
+      </div>
+    </div>
+
+    <div class="panel-card sage-card">
+      <h4>🦉 Start a Sage session</h4>
+      <p>Sage will ask you questions — not explain answers — until you can explain it yourself.</p>
+      <a class="help-inline" href="/help#step-clear">How do I clear a concept?</a>
+      <div class="sage-buttons" id="sage-quick-buttons">
+        <!-- Populated dynamically -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop llm-config-backdrop" id="llmConfigModal">
+  <div class="modal-card llm-config-card">
+    <div class="modal-header">
+      <div class="sage-avatar">⚙️</div>
+      <div class="modal-titles">
+        <h2>LLM Configuration</h2>
+        <p>Configure Ollama host and per-agent models</p>
+      </div>
+      <button class="close-btn" id="llmCloseBtn" type="button" aria-label="Close LLM settings" onclick="event.preventDefault(); closeLlmSettingsBtn();">✕</button>
+    </div>
+
+    <div class="llm-config-body">
+      <label class="llm-field-label" for="ollamaHostInput">Ollama Server URL</label>
+      <input id="ollamaHostInput" class="modal-input" type="text" placeholder="http://localhost:11434">
+
+      <div class="llm-config-row">
+        <div>
+          <label class="llm-field-label" for="scoutModelInput">Scout Model</label>
+          <input id="scoutModelInput" class="modal-input" type="text" placeholder="gemma4:e2b">
+        </div>
+        <div>
+          <label class="llm-field-label" for="sageModelInput">Sage Model</label>
+          <input id="sageModelInput" class="modal-input" type="text" placeholder="gemma4:e4b">
+        </div>
+      </div>
+
+      <label class="llm-field-label" for="lensModelInput">Lens Model</label>
+      <input id="lensModelInput" class="modal-input" type="text" placeholder="gemma4:e4b">
+
+      <div class="llm-model-actions">
+        <button class="btn-ghost" type="button" id="llmRefreshBtn">↻ Load Models from Host</button>
+      </div>
+
+      <div class="llm-model-chip-wrap" id="llmModelChipWrap"></div>
+      <p class="llm-config-hint">Tip: click a model chip to auto-fill empty fields.</p>
+    </div>
+
+    <div class="modal-footer llm-config-footer">
+      <div id="llmConfigStatus">Runtime updates apply immediately. Settings are saved locally.</div>
+      <div class="llm-config-actions">
+        <button class="btn-ghost" type="button" id="llmCancelBtn" onclick="event.preventDefault(); closeLlmSettingsBtn();">Cancel</button>
+        <button class="btn-dark" type="button" id="saveLlmBtn" onclick="event.preventDefault(); saveLlmSettings();">Save Changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const initialDebts = {{ debts_json | safe }};
+  let llmConfig = null;
+  
+  function renderLedger(debts) {
+    const tbody = document.getElementById('ledger-body');
+    tbody.innerHTML = '';
+    
+    let onLoan = 0; let persists = 0; let owned = 0;
+    
+    debts.forEach(d => {
+      if(d.status === 'on_loan') onLoan++;
+      if(d.status === 'persists') persists++;
+      if(d.status === 'clear' || d.status === 'owned') owned++;
+    });
+
+    document.getElementById('stat-onloan').innerText = onLoan;
+    document.getElementById('stat-persists').innerText = persists;
+    document.getElementById('stat-owned').innerText = owned;
+    document.getElementById('ledger-tag').innerText = `${debts.length} tracked`;
+
+    const quickButtons = document.getElementById('sage-quick-buttons');
+    quickButtons.innerHTML = '';
+
+    debts.forEach((d, i) => {
+      let pillClass = 'amber'; let pillText = 'On Loan'; let confColor = 'var(--amber)';
+      if(d.status === 'persists') { pillClass = 'coral'; pillText = 'Persists'; confColor = 'var(--coral)'; }
+      if(d.status === 'clear' || d.status === 'owned') { pillClass = 'teal'; pillText = 'Clear'; confColor = 'var(--teal)'; }
+
+        const conceptEncoded = encodeURIComponent(d.concept || '');
+
+        if(i < 3 && d.status !== 'owned' && d.status !== 'clear') {
+          quickButtons.innerHTML += `<button class="btn-ghost" onclick="openModal(decodeURIComponent('${conceptEncoded}'))">${d.concept}</button>`;
+      }
+
+      const dateStr = new Date(d.timestamp).toLocaleDateString();
+      const confPercent = Math.round((d.confidence || 0.5) * 100);
+
+      tbody.innerHTML += `
+        <div class="ledger-grid ledger-row" onclick="openModal(decodeURIComponent('${conceptEncoded}'))">
+          <div class="concept-cell">
+            <h3>${d.concept}</h3>
+            <p>${d.source_text ? d.source_text.substring(0,40)+'...' : ''}</p>
+          </div>
+          <div><span class="pill ${pillClass}">${pillText}</span></div>
+          <div>
+            <div class="conf-track"><div class="conf-fill" style="background: ${confColor}; width: ${confPercent}%;"></div></div>
+            <div class="conf-label">${confPercent}%</div>
+          </div>
+          <div class="date-cell">${dateStr}</div>
+          <div><button class="action-btn" aria-label="Open session">→</button></div>
+        </div>
+      `;
+    });
+  }
+
+  async function fetchState() {
+    try {
+      const res = await fetch('/api/state');
+      const data = await res.json();
+      renderLedger(data.debts);
+      await fetchDebtScore();
+    } catch (e) {
+      showToast('⚠️', 'Connection Error', 'Could not reach backend.');
+    }
+  }
+
+  async function fetchDebtScore() {
+    try {
+      const res = await fetch('/api/debt-score');
+      const d = await res.json();
+      const scoreEl = document.getElementById('stat-debt-score');
+      const subEl   = document.getElementById('stat-debt-sub');
+      if (!scoreEl) return;
+      scoreEl.textContent = d.score + '%';
+      if (d.score < 30)       { scoreEl.style.color = 'var(--teal)';  subEl.textContent = 'on track'; }
+      else if (d.score < 60)  { scoreEl.style.color = 'var(--amber)'; subEl.textContent = 'needs attention'; }
+      else                    { scoreEl.style.color = 'var(--coral)'; subEl.textContent = 'high debt — clear soon'; }
+    } catch (e) {}
+  }
+
+  function formatModelBadge(agent, modelName) {
+    if (!modelName) return `${agent} · --`;
+    const short = modelName.length > 20 ? `${modelName.slice(0, 20)}…` : modelName;
+    return `${agent} · ${short}`;
+  }
+
+  function applyLlmConfigToUi() {
+    if (!llmConfig) return;
+    const scoutBadge = document.getElementById('scout-model-badge');
+    const lensBadge = document.getElementById('lens-model-badge');
+    if (scoutBadge) scoutBadge.textContent = formatModelBadge('Scout', llmConfig.scout_model);
+    if (lensBadge) lensBadge.textContent = formatModelBadge('Lens', llmConfig.lens_model);
+  }
+
+  function renderModelChips(models) {
+    const wrap = document.getElementById('llmModelChipWrap');
+    wrap.innerHTML = '';
+    if (!models || models.length === 0) {
+      wrap.innerHTML = '<span class="llm-model-empty">No models found for this host.</span>';
+      return;
+    }
+    models.forEach((name) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'llm-model-chip';
+      btn.textContent = name;
+      btn.onclick = () => {
+        const scout = document.getElementById('scoutModelInput');
+        const sage = document.getElementById('sageModelInput');
+        const lens = document.getElementById('lensModelInput');
+        if (!scout.value.trim()) scout.value = name;
+        else if (!sage.value.trim()) sage.value = name;
+        else lens.value = name;
+      };
+      wrap.appendChild(btn);
+    });
+  }
+
+  function fillLlmForm(configData) {
+    document.getElementById('ollamaHostInput').value = configData.ollama_host || '';
+    document.getElementById('scoutModelInput').value = configData.scout_model || '';
+    document.getElementById('sageModelInput').value = configData.sage_model || '';
+    document.getElementById('lensModelInput').value = configData.lens_model || '';
+    renderModelChips(configData.available_models || []);
+  }
+
+  async function loadLlmConfig() {
+    try {
+      const res = await fetch('/api/llm/config');
+      const data = await res.json();
+      llmConfig = data;
+      applyLlmConfigToUi();
+      fillLlmForm(data);
+    } catch (e) {
+      showToast('⚠️', 'LLM config error', 'Unable to load runtime LLM settings.');
+    }
+  }
+
+  function setLlmModalOpen(isOpen) {
+    const modal = document.getElementById('llmConfigModal');
+    if (!modal) return;
+    modal.classList.toggle('open', isOpen);
+    modal.style.display = isOpen ? 'flex' : 'none';
+  }
+
+  function openLlmSettings() {
+    setLlmModalOpen(true);
+    if (llmConfig) fillLlmForm(llmConfig);
+  }
+
+  function closeLlmSettings(event) {
+    if (event && event.target === document.getElementById('llmConfigModal')) closeLlmSettingsBtn();
+  }
+
+  function closeLlmSettingsBtn() {
+    setLlmModalOpen(false);
+  }
+
+  async function refreshLlmModels() {
+    const host = document.getElementById('ollamaHostInput').value.trim();
+    if (!host) {
+      showToast('⚠️', 'Missing host', 'Enter the Ollama server URL first.');
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/llm/models?host=${encodeURIComponent(host)}`);
+      const data = await res.json();
+      renderModelChips(data.models || []);
+      if (!data.models || data.models.length === 0) {
+        showToast('⚠️', 'No models found', 'Host is reachable but returned no tags.');
+      } else {
+        showToast('✅', 'Models loaded', `Found ${data.models.length} model tag(s).`);
+      }
+    } catch (e) {
+      showToast('❌', 'Model load failed', 'Could not reach the Ollama host.');
+    }
+  }
+
+  async function saveLlmSettings() {
+    const payload = {
+      ollama_host: document.getElementById('ollamaHostInput').value.trim(),
+      scout_model: document.getElementById('scoutModelInput').value.trim(),
+      sage_model: document.getElementById('sageModelInput').value.trim(),
+      lens_model: document.getElementById('lensModelInput').value.trim(),
+    };
+
+    if (!payload.ollama_host || !payload.scout_model || !payload.sage_model || !payload.lens_model) {
+      showToast('⚠️', 'Missing fields', 'Host and all model fields are required.');
+      return;
+    }
+
+    // Close immediately so the user is returned to the app even if save is slow.
+    closeLlmSettingsBtn();
+
+    try {
+      const res = await fetch('/api/llm/config', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast('❌', 'Save failed', data.detail || 'Unable to save configuration.');
+        return;
+      }
+      llmConfig = data;
+      applyLlmConfigToUi();
+      fillLlmForm(data);
+      document.getElementById('llmConfigStatus').textContent = 'Saved. New calls now use this host and model mapping.';
+      showToast('✅', 'LLM settings saved', 'Runtime config updated for Scout, Sage, and Lens.');
+      fetchState();
+    } catch (e) {
+      showToast('❌', 'Save failed', 'Could not save LLM settings.');
+    }
+  }
+
+  async function simulateTag() {
+    const val = document.getElementById('scoutInput').value;
+    if(!val) { showToast('⚠️', 'Empty input', 'Please paste something first.'); return; }
+    
+    document.getElementById('scoutInput').value = '';
+    showToast('⚡', 'Scout is analyzing', 'This will take a few seconds...');
+    
+    try {
+      await fetch('/api/scout', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({text: val})
+      });
+      setTimeout(() => {
+        showToast('✅', 'Analysis complete', 'Refresh your dashboard in a moment.');
+        fetchState();
+      }, 5000); 
+    } catch(e) {
+      showToast('❌', 'Error', 'Failed to tag concepts.');
+    }
+  }
+
+  async function simulateLens() {
+    const input = document.getElementById('lensInput');
+    if(!input.files.length) return;
+
+    const file = input.files[0];
+    const formData = new FormData();
+    formData.append('file', file);
+    const targetConcept = prompt("What concept are you verifying?") || "General";
+    formData.append('concept', targetConcept);
+
+    showToast('🔬', 'Lens is analyzing...', 'Please wait.');
+    
+    try {
+      const res = await fetch('/api/lens/verify', { method: 'POST', body: formData });
+      const data = await res.json();
+      
+      if(data.explanation && data.width > 0) {
+          showToast('📌', 'Lens found an error', data.explanation);
+      } else {
+          showToast('✅', 'Lens verification', 'No visual logic failures detected.');
+      }
+      fetchState();
+    } catch(e) {
+      showToast('❌', 'Lens Error', 'Failed to verify image.');
+    }
+  }
+
+  // Init
+  try {
+    renderLedger(initialDebts);
+  } catch (e) {
+    console.error('Ledger render error:', e);
+  }
+  fetchDebtScore();
+  loadLlmConfig();
+  const llmModal = document.getElementById('llmConfigModal');
+  const llmCloseBtn = document.getElementById('llmCloseBtn');
+  const llmCancelBtn = document.getElementById('llmCancelBtn');
+  const llmRefreshBtn = document.getElementById('llmRefreshBtn');
+  const saveBtn = document.getElementById('saveLlmBtn');
+  if (llmModal) {
+    llmModal.addEventListener('click', (event) => {
+      if (event.target === llmModal) closeLlmSettingsBtn();
+    });
+  }
+  const llmModalCard = document.querySelector('#llmConfigModal .llm-config-card');
+  if (llmModalCard) {
+    llmModalCard.addEventListener('click', (event) => event.stopPropagation());
+  }
+  if (llmCloseBtn) {
+    llmCloseBtn.addEventListener('click', closeLlmSettingsBtn);
+  }
+  if (llmCancelBtn) {
+    llmCancelBtn.addEventListener('click', closeLlmSettingsBtn);
+  }
+  if (llmRefreshBtn) {
+    llmRefreshBtn.addEventListener('click', refreshLlmModels);
+  }
+  if (saveBtn) {
+    saveBtn.addEventListener('click', saveLlmSettings);
+  }
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && llmModal && llmModal.classList.contains('open')) {
+      closeLlmSettingsBtn();
+    }
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+
+{% block title %}Reports · KnowLedge{% endblock %}
+{% block topbar_title %}Reports{% endblock %}
+{% block topbar_sub %}Insight aggregates and weekly summaries{% endblock %}
+
+{% block head %}
+<style>
+  /* Print stylesheet */
+  @media print {
+    body { background: white; }
+    body::before { display: none; }
+    .sidebar, .topbar, .btn-group, .download-btn, #toast-container, .modal-backdrop { display: none !important; }
+    .main-content { margin-left: 0; padding: 0; }
+    .content { padding: 0; }
+    .report-card, .ledger-card { box-shadow: none; border: 1px solid #ddd; break-inside: avoid; margin-bottom: 24px;}
+  }
+
+  .toggle-group { display: flex; gap: 4px; background: var(--cream-deep); padding: 4px; border-radius: 10px; }
+  .toggle-group a { padding: 6px 16px; font-size: 13px; font-weight: 500; color: var(--ink-muted); border-radius: 6px; text-decoration: none;}
+  .toggle-group a.active { background: white; color: var(--ink); box-shadow: var(--shadow-sm); }
+  
+  .report-summary-card { background: #fff; border: 1px solid var(--rule); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); overflow: hidden; display: flex; }
+  .rsc-left { padding: 32px 36px; flex: 6; border-right: 1px solid var(--rule); }
+  .rsc-right { padding: 32px 36px; flex: 4; display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--cream); }
+  
+  .rsc-header { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--ink-muted); text-transform: uppercase; margin-bottom: 4px; }
+  .rsc-title { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 700; margin-bottom: 24px; }
+  
+  .metric-row { padding: 16px 0; border-bottom: 1px solid var(--rule); display: flex; align-items: center; gap: 16px; }
+  .metric-row:last-of-type { border-bottom: none; }
+  .m-val { font-family: 'Playfair Display', serif; font-size: 28px; font-weight: 700; min-width: 40px; }
+  .m-label { font-size: 13px; color: var(--ink-muted); }
+  
+  .next-clear-banner { background: var(--amber-light); padding: 16px 20px; border-radius: 8px; margin-top: 16px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: background 0.2s; }
+  .next-clear-banner:hover { background: #faecc0; }
+  
+  .streak-circle { width: 160px; height: 160px; border-radius: 50%; background: var(--ink); display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: var(--shadow-md); margin-bottom: 16px; }
+  .streak-num { font-family: 'Playfair Display', serif; font-size: 48px; font-weight: 700; color: white; line-height: 1; }
+  .streak-lbl { font-size: 13px; color: var(--amber-mid); margin-top: 4px; }
+  
+  .score-compare { display: flex; gap: 12px; align-items: center; margin-top: 16px; font-size: 13px; font-weight: 500;}
+  .score-box { padding: 8px 12px; border-radius: 6px; border: 1px solid var(--rule); background: white; }
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+  <div class="toggle-group">
+    <a href="/reports?view=student" class="{% if view == 'student' %}active{% endif %}">Student view</a>
+    <a href="/reports?view=instructor" class="{% if view == 'instructor' %}active{% endif %}">Instructor view</a>
+  </div>
+{% endblock %}
+
+{% block content %}
+
+{% if view == 'student' %}
+  <!-- Student Weekly Summary -->
+  <div class="report-summary-card report-card">
+    <div class="rsc-left">
+      <div class="rsc-header">Week of Oct 2 - Oct 9</div>
+      <div class="rsc-title">Weekly Report</div>
+      
+      <div class="metric-row">
+        <div class="m-val" style="color: {% if weekly_report.net_change < 0 %}var(--teal){% else %}var(--coral){% endif %};">
+          {% if weekly_report.net_change < 0 %}↓{% else %}↑{% endif %} {{ weekly_report.net_change|abs }}
+        </div>
+        <div class="m-label">debt score change this week</div>
+      </div>
+      <div class="metric-row">
+        <div class="m-val" style="color: var(--teal);">{{ weekly_report.cleared_this_week }}</div>
+        <div class="m-label">concepts moved to Owned</div>
+      </div>
+      <div class="metric-row">
+        <div class="m-val" style="color: var(--amber);">{{ weekly_report.new_debt }}</div>
+        <div class="m-label">new concepts added to ledger</div>
+      </div>
+      
+      <div class="next-clear-banner" onclick="openModal('{{ weekly_report.top_concept }}')">
+        <div style="font-size: 14px; color: var(--amber);">🎯 Next to clear: <strong style="color: var(--ink);">{{ weekly_report.top_concept }}</strong></div>
+        <div style="font-size: 13px; font-weight: 500; color: var(--amber);">Start Sage session &rarr;</div>
+      </div>
+    </div>
+    
+    <div class="rsc-right">
+      <div class="streak-circle">
+        <div class="streak-num">{{ weekly_report.streak_days }}</div>
+        <div class="streak-lbl">day streak</div>
+      </div>
+      <div style="font-size: 12px; color: var(--ink-muted); text-align: center;">Keep clearing daily to grow your streak.</div>
+      
+      <div class="score-compare">
+        <div class="score-box">Last week: {{ weekly_report.prev_debt_score }}%</div>
+        <div style="color: var(--ink-muted);">&rarr;</div>
+        <div class="score-box" style="color: {% if weekly_report.curr_debt_score < weekly_report.prev_debt_score %}var(--teal){% else %}var(--coral){% endif %};">This week: {{ weekly_report.curr_debt_score }}%</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Concept History Table -->
+  <div style="margin-top: 40px;">
+    <h2 style="font-family: 'Playfair Display', serif; font-size: 17px; margin-bottom: 16px;">Full concept history</h2>
+    <div class="ledger-card">
+      <div class="ledger-grid ledger-header" style="grid-template-columns: 1.5fr 1fr 1fr 1fr 1fr;">
+        <div>Concept</div>
+        <div>Subject</div>
+        <div>Status</div>
+        <div>Days taken</div>
+        <div></div>
+      </div>
+      {% for c in concept_time_to_clear|sort(attribute='status', reverse=true) %}
+      <div class="ledger-grid ledger-row" style="grid-template-columns: 1.5fr 1fr 1fr 1fr 1fr;">
+        <div class="concept-cell"><h3>{{ c.concept }}</h3></div>
+        <div style="font-size: 13px; color: var(--ink-muted);">{{ c.subject }}</div>
+        <div>
+          {% if c.status == 'owned' %}<span class="pill teal">Owned</span>
+          {% elif c.status == 'persists' %}<span class="pill coral">Persists</span>
+          {% else %}<span class="pill amber">On Loan</span>{% endif %}
+        </div>
+        <div>
+          {% if c.days_to_clear is not none and c.days_to_clear > 14 %} <span style="color: var(--coral); font-weight: 500;">{{ c.days_to_clear }} days</span>
+          {% elif c.days_to_clear is not none and c.days_to_clear >= 7 %} <span style="color: var(--amber); font-weight: 500;">{{ c.days_to_clear }} days</span>
+          {% elif c.days_to_clear is not none %} <span style="color: var(--teal); font-weight: 500;">{{ c.days_to_clear }} days</span>
+          {% else %} <span style="color: var(--ink-muted); font-weight: 500;">—</span>{% endif %}
+        </div>
+        <div></div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  
+  <div style="margin-top: 32px; text-align: center;">
+    <button class="btn-dark download-btn" onclick="window.print()">↓ Download PDF report</button>
+  </div>
+
+{% else %}
+  <!-- Instructor Class Report -->
+  <div class="grid-2col" style="grid-template-columns: 1fr 320px;">
+    
+    <div>
+      <h2 style="font-family: 'Playfair Display', serif; font-size: 17px; margin-bottom: 16px;">Class Performance</h2>
+      <div class="ledger-card">
+        <div class="ledger-grid ledger-header" style="grid-template-columns: 1.2fr 80px 80px 100px 1fr;">
+          <div>Concept</div>
+          <div title="Total Borrowed">Borrowed</div>
+          <div title="Total Cleared">Cleared</div>
+          <div title="Avg Days to Clear">Avg Days</div>
+          <div>Persistence Rate</div>
+        </div>
+        {% for r in class_report %}
+        <div class="ledger-grid ledger-row" style="grid-template-columns: 1.2fr 80px 80px 100px 1fr; align-items: center;">
+          <div class="concept-cell"><h3>{{ r.concept }}</h3></div>
+          <div style="font-size: 13px;">{{ r.total_borrowed }}</div>
+          <div style="font-size: 13px;">{{ r.total_cleared }}</div>
+          <div style="font-size: 13px;">{{ r.avg_days_to_clear }}d</div>
+          <div>
+            {% set pr = r.persistence_rate %}
+            {% set color = 'var(--teal)' %}
+            {% if pr > 60 %}{% set color = 'var(--coral)' %}
+            {% elif pr >= 30 %}{% set color = 'var(--amber)' %}{% endif %}
+            
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div class="conf-track" style="width: 60px; margin: 0;"><div class="conf-fill" style="background: {{ color }}; width: {{ pr }}%;"></div></div>
+              <span style="font-size: 12px; color: var(--ink-muted);">{{ pr }}%</span>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    
+    <div>
+      <h2 style="font-family: 'Playfair Display', serif; font-size: 17px; margin-bottom: 16px; color: transparent;">Actions</h2>
+      <div class="panel-card" style="background: var(--ink); color: white; border-color: transparent;">
+        <h3 style="font-family: 'Playfair Display', serif; font-size: 16px; margin-bottom: 16px;">Export class data</h3>
+        <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+          <a href="/reports/export?format=csv" class="btn-ghost" style="color: white; border-color: rgba(255,255,255,0.2); text-decoration: none; flex: 1; text-align: center;">↓ CSV</a>
+          <button class="btn-ghost" style="color: white; border-color: rgba(255,255,255,0.2); flex: 1;" onclick="window.print()">↓ PDF</button>
+        </div>
+        <p style="font-size: 11px; color: rgba(255,255,255,0.5); line-height: 1.4;">All exports are concept-level aggregates only. No individual student data is included.</p>
+      </div>
+
+      <div class="panel-card" style="margin-top: 16px;">
+        <h3 style="font-family: 'Playfair Display', serif; font-size: 16px; margin-bottom: 10px;">Instructor Sync</h3>
+        <div style="font-size: 12px; color: var(--ink-muted); margin-bottom: 10px;">Last sync status: {{ sync_audit[0].status if sync_audit else 'never' }}</div>
+        <button class="btn-dark" style="width: 100%;" onclick="shareWeeklyNow()">Share Weekly Aggregate</button>
+        <div style="font-size: 11px; color: var(--ink-muted); margin-top: 8px;">No chat text or student identifiers are shared.</div>
+      </div>
+
+      <div class="panel-card" style="margin-top: 16px;">
+        <h3 style="font-family: 'Playfair Display', serif; font-size: 16px; margin-bottom: 10px;">Integrity Snapshot</h3>
+        <div style="font-size: 12px; color: var(--ink-muted);">Signed sessions: {{ integrity_summary.sessions_with_signatures }}/{{ integrity_summary.sessions_total }}</div>
+        <div style="font-size: 12px; color: var(--ink-muted);">Spoof attempts: {{ integrity_summary.spoof_attempts }}</div>
+        <div style="font-size: 12px; color: var(--ink-muted);">Flagged concepts: {{ integrity_summary.flagged_concepts }}</div>
+      </div>
+    </div>
+    
+  </div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+  async function shareWeeklyNow() {
+    try {
+      const res = await fetch('/api/sync/share-weekly', { method: 'POST' });
+      if (!res.ok) throw new Error('Sync failed');
+      window.location.reload();
+    } catch (e) {
+      alert('Weekly sync failed. Please retry.');
+    }
+  }
+</script>
+{% endblock %}

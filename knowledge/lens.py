@@ -1,0 +1,73 @@
+import ollama
+import json
+import base64
+from dataclasses import dataclass
+from typing import Optional
+from PIL import Image
+import io
+from . import config
+
+@dataclass
+class ExaminerResult:
+    x: int
+    y: int
+    width: int
+    height: int
+    explanation: str
+    audio_bytes: Optional[bytes] = None
+
+def verify_image(image_bytes: bytes, concept: str) -> ExaminerResult:
+    """
+    Runs gemma-4-E4B vision to parse handwritten exams and verify understanding.
+    Returns the coordinates of the misconception and an explanation.
+    """
+    try:
+        # Load image to get dimensions
+        img = Image.open(io.BytesIO(image_bytes))
+        b64_image = base64.b64encode(image_bytes).decode()
+
+        vision_prompt = f"""
+        Analyze this handwritten work for the concept: [{concept}].
+        Identify the exact step where the logic fails.
+        Return a strict JSON object with this exact format, nothing else:
+        {{
+            "x": 100,
+            "y": 150,
+            "width": 200,
+            "height": 50,
+            "explanation": "Brief explanation of the misconception here."
+        }}
+        Use approximate pixel coordinates assuming the image is {img.width}x{img.height}.
+        """
+        
+        client = ollama.Client(host=config.OLLAMA_HOST)
+        response = client.chat(
+            model=config.EXAMINER_MODEL,
+            messages=[{
+                'role': 'user', 
+                'content': vision_prompt,
+                'images': [b64_image]
+            }],
+            format='json'
+        )
+        
+        raw_json = response.get('message', {}).get('content', '')
+        data = json.loads(raw_json)
+        
+        # Audio feedback
+        audio_data = response.get('message', {}).get('audio')
+        audio_bytes = base64.b64decode(audio_data) if audio_data else None
+
+        return ExaminerResult(
+            x=data.get('x', 0),
+            y=data.get('y', 0),
+            width=data.get('width', 0),
+            height=data.get('height', 0),
+            explanation=data.get('explanation', 'Unknown error.'),
+            audio_bytes=audio_bytes
+        )
+        
+    except json.JSONDecodeError:
+        return ExaminerResult(0, 0, 0, 0, "Failed to parse coordinates from vision model.")
+    except Exception as e:
+        return ExaminerResult(0, 0, 0, 0, f"Error connecting to vision model: {e}")

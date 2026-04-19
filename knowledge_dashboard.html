@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KnowLedge - Learning Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&family=Playfair+Display:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream: #F5F0E8;
+    --cream-deep: #EDE7D9;
+    --ink: #1C1A14;
+    --ink-light: #3D3A2E;
+    --ink-muted: #7A7565;
+    --amber: #D4820A;
+    --amber-light: #FDF3DC;
+    --amber-mid: #F5C842;
+    --teal: #0E7A6E;
+    --teal-light: #D6F0EC;
+    --coral: #C94A3A;
+    --coral-light: #FDECEA;
+    --rule: rgba(28,26,20,0.12);
+    --rule-strong: rgba(28,26,20,0.22);
+    --shadow-sm: 0 2px 4px rgba(28,26,20,0.04), 0 1px 2px rgba(28,26,20,0.08);
+    --shadow-md: 0 4px 12px rgba(28,26,20,0.06), 0 2px 4px rgba(28,26,20,0.08);
+    --shadow-lg: 0 12px 24px rgba(28,26,20,0.1), 0 4px 8px rgba(28,26,20,0.06);
+    --radius: 12px;
+    --radius-lg: 20px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background-color: var(--cream);
+    color: var(--ink);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none;
+    z-index: -1;
+    background: repeating-linear-gradient(
+      transparent,
+      transparent 27px,
+      rgba(28,26,20,0.04) 27px,
+      rgba(28,26,20,0.04) 28px
+    );
+  }
+
+  /* Animations */
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes pulse-green {
+    0% { opacity: 1; box-shadow: 0 0 0 0 rgba(74, 222, 212, 0.4); }
+    50% { opacity: 0.7; box-shadow: 0 0 0 4px rgba(74, 222, 212, 0); }
+    100% { opacity: 1; box-shadow: 0 0 0 0 rgba(74, 222, 212, 0); }
+  }
+
+  /* Layout */
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: 240px;
+    background: var(--ink);
+    color: white;
+    display: flex;
+    flex-direction: column;
+    padding: 24px 16px;
+    z-index: 50;
+  }
+
+  .main-content {
+    margin-left: 240px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Sidebar contents */
+  .logo-area {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 40px;
+    padding: 0 8px;
+  }
+  .logo-mark {
+    width: 36px; height: 36px;
+    background: var(--amber-mid);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--ink);
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+    font-size: 18px;
+  }
+  .logo-text-group { display: flex; flex-direction: column; }
+  .logo-wordmark {
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+    font-size: 20px;
+    line-height: 1;
+  }
+  .logo-subtitle {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: rgba(255,255,255,0.38);
+    margin-top: 4px;
+    text-transform: uppercase;
+  }
+
+  .nav-section { margin-bottom: 28px; }
+  .nav-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: rgba(255,255,255,0.3);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    padding: 0 8px;
+  }
+  .nav-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px;
+    font-size: 14px;
+    color: rgba(255,255,255,0.55);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    margin-bottom: 2px;
+  }
+  .nav-item:hover { background: rgba(255,255,255,0.07); color: white; }
+  .nav-item.active {
+    background: rgba(212,130,10,0.18);
+    color: var(--amber-mid);
+  }
+  .nav-badge {
+    margin-left: auto;
+    background: var(--amber);
+    color: white;
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 12px;
+  }
+
+  .sidebar-footer {
+    margin-top: auto;
+    padding: 0 8px;
+  }
+  .scout-status {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px;
+    color: rgba(255,255,255,0.4);
+    margin-bottom: 4px;
+  }
+  .status-dot {
+    width: 7px; height: 7px;
+    background: #4aded4;
+    border-radius: 50%;
+    animation: pulse-green 2s infinite;
+  }
+  .offline-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: rgba(255,255,255,0.2);
+  }
+
+  /* Topbar */
+  .topbar {
+    position: sticky;
+    top: 0;
+    background: rgba(245,240,232,0.9);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    padding: 16px 32px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--rule);
+    z-index: 40;
+  }
+  .top-left h1 {
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+    font-size: 22px;
+    color: var(--ink);
+    margin-bottom: 4px;
+  }
+  .top-left p {
+    font-size: 13px;
+    color: var(--ink-muted);
+  }
+  .top-right { display: flex; gap: 12px; }
+  
+  /* Buttons */
+  button {
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    border: none; background: none;
+    transition: all 0.2s ease;
+  }
+  .btn-ghost {
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink-muted);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+  }
+  .btn-ghost:hover { border-color: var(--ink-light); color: var(--ink); }
+  .btn-primary {
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    background: var(--teal);
+    color: white;
+    border-radius: 8px;
+  }
+  .btn-primary:hover { background: #0b6158; }
+
+  /* Content Views */
+  .content { padding: 32px; flex: 1; }
+  .content > * {
+    animation: fade-up 0.4s ease forwards;
+    opacity: 0;
+  }
+  .content > *:nth-child(1) { animation-delay: 0.05s; }
+  .content > *:nth-child(2) { animation-delay: 0.1s; }
+  .content > *:nth-child(3) { animation-delay: 0.15s; }
+
+  /* View Toggle */
+  .view-section { display: none; }
+  .view-section.active { display: block; }
+
+  /* Tab switcher */
+  .tab-row {
+    display: inline-flex;
+    background: var(--cream-deep);
+    padding: 4px;
+    border-radius: 10px;
+    margin-bottom: 32px;
+  }
+  .tab-pill {
+    padding: 6px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink-muted);
+    border-radius: 6px;
+  }
+  .tab-pill.active {
+    background: white;
+    color: var(--ink);
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* Stats row */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  .stat-card {
+    background: white;
+    border-radius: var(--radius);
+    border: 1px solid var(--rule);
+    box-shadow: var(--shadow-sm);
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+  .stat-card::after {
+    content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
+  }
+  .stat-card.amber::after { background: var(--amber); }
+  .stat-card.teal::after { background: var(--teal); }
+  .stat-card.coral::after { background: var(--coral); }
+  .stat-card.ink::after { background: var(--ink); }
+  
+  .stat-val {
+    font-family: 'Playfair Display', serif;
+    font-weight: 700; font-size: 32px;
+    color: var(--ink);
+    margin-bottom: 4px;
+  }
+  .stat-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px; text-transform: uppercase;
+    color: var(--ink-muted);
+    margin-bottom: 4px;
+  }
+  .stat-sub {
+    font-size: 12px; color: var(--ink-muted);
+  }
+
+  /* Two col grid */
+  .grid-2col {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 24px;
+  }
+
+  /* Ledger section */
+  .section-header {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 16px;
+  }
+  .section-header h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: 18px; color: var(--ink);
+  }
+  .tag {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px; padding: 2px 8px; border-radius: 12px;
+    background: var(--cream-deep); color: var(--ink-muted);
+  }
+  .filter-btn { margin-left: auto; }
+
+  .ledger-card {
+    background: white;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--rule);
+    overflow: hidden;
+  }
+  .ledger-grid {
+    display: grid;
+    grid-template-columns: 1fr 90px 100px 120px 36px;
+    align-items: center;
+  }
+  .ledger-header {
+    background: var(--cream-deep);
+    font-family: 'DM Mono', monospace;
+    font-size: 11px; text-transform: uppercase;
+    color: var(--ink-muted);
+    padding: 12px 16px;
+  }
+  .ledger-row {
+    padding: 16px;
+    border-bottom: 1px solid var(--rule);
+    cursor: pointer;
+    transition: background 0.2s ease;
+  }
+  .ledger-row:last-child { border-bottom: none; }
+  .ledger-row:hover { background: var(--cream); }
+  
+  .concept-cell h3 { font-size: 14px; font-weight: 500; color: var(--ink); margin-bottom: 4px; display: flex; align-items: center; gap: 8px;}
+  .concept-cell p { font-size: 12px; color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90%; }
+  .new-badge { font-family: 'DM Mono', monospace; font-size: 9px; background: var(--amber-light); color: var(--amber); padding: 2px 6px; border-radius: 4px;}
+
+  .pill {
+    font-family: 'DM Mono', monospace; font-size: 11px;
+    padding: 4px 8px; border-radius: 20px;
+    display: inline-block; text-align: center;
+  }
+  .pill.amber { background: var(--amber-light); color: var(--amber); }
+  .pill.teal { background: var(--teal-light); color: var(--teal); }
+  .pill.coral { background: var(--coral-light); color: var(--coral); }
+
+  .conf-track {
+    width: 100%; height: 5px; background: var(--cream-deep);
+    border-radius: 3px; overflow: hidden; margin-bottom: 4px;
+  }
+  .conf-fill { height: 100%; }
+  .conf-label { font-size: 11px; color: var(--ink-muted); }
+
+  .date-cell { font-size: 13px; color: var(--ink-muted); }
+
+  .action-btn {
+    width: 28px; height: 28px; border-radius: 6px;
+    border: 1px solid var(--rule);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--ink-muted);
+  }
+  .ledger-row:hover .action-btn { border-color: var(--ink-light); }
+  .action-btn:hover { background: var(--ink); color: white; border-color: var(--ink); }
+
+  /* Right Panels */
+  .panel-stack { display: flex; flex-direction: column; gap: 16px; }
+  
+  .panel-card {
+    background: white; border-radius: var(--radius-lg);
+    border: 1px solid var(--rule); box-shadow: var(--shadow-sm);
+    padding: 16px;
+  }
+  .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;}
+  .panel-title { font-size: 13px; font-weight: 500; }
+  .panel-badge {
+    font-family: 'DM Mono', monospace; font-size: 10px;
+    background: var(--ink); color: var(--amber-mid);
+    padding: 2px 8px; border-radius: 12px;
+  }
+  .panel-badge.vision { color: #4aded4; }
+
+  textarea.paste-area {
+    width: 100%; min-height: 120px;
+    background: var(--cream); border: 1px solid var(--rule);
+    border-radius: 8px; padding: 12px;
+    font-family: 'DM Mono', monospace; font-size: 12.5px;
+    color: var(--ink); resize: none; margin-bottom: 12px;
+  }
+  textarea.paste-area:focus { outline: none; border-color: var(--amber); }
+  
+  .panel-footer { display: flex; justify-content: space-between; align-items: center; }
+  .panel-hint { font-size: 11px; color: var(--ink-muted); }
+  .btn-dark { background: var(--ink); color: white; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 500;}
+  .btn-dark:hover { background: var(--ink-light); }
+
+  .camera-panel { background: var(--ink); color: white; border-color: transparent; position: relative;}
+  .camera-panel .panel-title { color: white; }
+  .camera-box {
+    height: 150px; background: rgba(255,255,255,0.05);
+    border: 1px dashed rgba(255,255,255,0.2); border-radius: 12px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    cursor: pointer; transition: all 0.2s ease;
+  }
+  .camera-box:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.4); }
+  .camera-box p { font-size: 12px; color: rgba(255,255,255,0.6); text-align: center; margin-top: 8px; line-height: 1.4;}
+  #lensInput { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;}
+
+  .sage-card { padding: 20px; }
+  .sage-card h4 { font-size: 13px; font-weight: 500; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;}
+  .sage-card p { font-size: 12px; color: var(--ink-muted); margin-bottom: 16px; line-height: 1.5;}
+  .sage-buttons { display: flex; gap: 8px; flex-wrap: wrap;}
+
+  /* Instructor View */
+  .heatmap-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 16px; margin-top: 16px;
+  }
+  .heatmap-tile {
+    background: white; border-radius: 10px;
+    border: 1px solid var(--rule); box-shadow: var(--shadow-sm);
+    padding: 24px 16px; text-align: center;
+  }
+  .heatmap-tile.coral { border-top: 3px solid var(--coral); }
+  .heatmap-tile.amber { border-top: 3px solid var(--amber); }
+  .heatmap-tile.teal { border-top: 3px solid var(--teal); }
+  
+  .tile-val { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 28px; margin-bottom: 4px; }
+  .heatmap-tile.coral .tile-val { color: var(--coral); }
+  .heatmap-tile.amber .tile-val { color: var(--amber); }
+  .heatmap-tile.teal .tile-val { color: var(--teal); }
+  .tile-label { font-size: 12px; color: var(--ink-muted); }
+
+  .weekly-signal {
+    background: var(--ink); color: white;
+    border-radius: var(--radius-lg); padding: 24px;
+    margin-top: 24px;
+  }
+  .weekly-signal h3 { font-family: 'Playfair Display', serif; font-size: 16px; margin-bottom: 12px;}
+  .weekly-signal p { font-size: 13px; color: rgba(255,255,255,0.7); line-height: 1.6;}
+  .weekly-signal span { color: var(--amber-mid); font-weight: 500; }
+  .signal-footer { font-family: 'DM Mono', monospace; font-size: 11px; color: rgba(255,255,255,0.3); margin-top: 16px;}
+
+  /* Sage Modal */
+  .modal-backdrop {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(28,26,20,0.55);
+    backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+    z-index: 100;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+  }
+  .modal-backdrop.open { opacity: 1; pointer-events: all; }
+  .modal-card {
+    background: white; width: 100%; max-width: 520px;
+    border-radius: 20px; box-shadow: var(--shadow-lg);
+    transform: translateY(16px); transition: transform 0.3s ease;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .modal-backdrop.open .modal-card { transform: translateY(0); }
+  
+  .modal-header {
+    padding: 20px 24px; border-bottom: 1px solid var(--rule);
+    display: flex; align-items: center; gap: 16px;
+  }
+  .sage-avatar {
+    width: 42px; height: 42px; background: var(--amber-light);
+    border: 2px solid var(--amber); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; font-size: 20px;
+  }
+  .modal-titles h2 { font-family: 'Playfair Display', serif; font-size: 18px; color: var(--ink); }
+  .modal-titles p { font-size: 13px; color: var(--ink-muted); margin-top: 2px;}
+  .close-btn { margin-left: auto; font-size: 20px; color: var(--ink-muted); cursor: pointer;}
+  .close-btn:hover { color: var(--ink); }
+
+  .modal-body {
+    padding: 24px; background: var(--cream);
+    min-height: 200px; max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px;
+  }
+  .bubble {
+    padding: 12px 16px; font-size: 14px; line-height: 1.5;
+    max-width: 85%;
+  }
+  .bubble.sage {
+    background: var(--cream-deep); color: var(--ink);
+    border-radius: 12px 12px 12px 2px; border: 1px solid var(--rule);
+    align-self: flex-start;
+  }
+  .bubble.student {
+    background: var(--ink); color: white;
+    border-radius: 12px 12px 2px 12px;
+    align-self: flex-end;
+    opacity: 0; transform: translateY(6px);
+    transition: all 0.3s ease;
+  }
+  .bubble.student.visible { opacity: 1; transform: translateY(0); }
+
+  .modal-input-row {
+    padding: 16px 24px; background: white; border-top: 1px solid var(--rule);
+    display: flex; gap: 12px;
+  }
+  .modal-input {
+    flex: 1; background: var(--cream); border: 1px solid var(--rule);
+    border-radius: 8px; padding: 10px 16px; font-family: 'DM Sans', sans-serif;
+    font-size: 14px; outline: none; transition: border 0.2s ease;
+  }
+  .modal-input:focus { border-color: var(--amber); }
+  .modal-send {
+    background: var(--ink); color: white; padding: 0 20px;
+    border-radius: 8px; font-weight: 500; font-size: 13px;
+  }
+  .modal-send:hover { background: var(--amber); }
+
+  .modal-footer {
+    background: var(--cream-deep); padding: 12px 24px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: 'DM Mono', monospace; font-size: 10px; color: var(--ink-muted);
+  }
+  .success-label { color: var(--teal); font-weight: 500; opacity: 0; transition: opacity 0.3s ease;}
+  .success-label.visible { opacity: 1; }
+
+  /* Toasts */
+  #toast-container {
+    position: fixed; bottom: 28px; right: 28px;
+    display: flex; flex-direction: column; gap: 10px;
+    z-index: 100; pointer-events: none;
+  }
+  .toast {
+    background: var(--ink); color: white;
+    padding: 16px; border-radius: 10px; box-shadow: var(--shadow-lg);
+    display: flex; align-items: flex-start; gap: 12px;
+    min-width: 300px; max-width: 380px;
+    animation: fade-up 0.25s ease forwards;
+  }
+  .toast.hide { opacity: 0; transition: opacity 0.3s ease; }
+  .toast-icon { font-size: 18px; }
+  .toast-content h5 { font-size: 13px; font-weight: 600; margin-bottom: 4px;}
+  .toast-content p { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--amber-mid); line-height: 1.4;}
+
+</style>
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="logo-area">
+      <div class="logo-mark">K</div>
+      <div class="logo-text-group">
+        <div class="logo-wordmark">KnowLedge</div>
+        <div class="logo-subtitle">Learning Ledger</div>
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">Student</div>
+      <a class="nav-item active" onclick="switchView('student', this)">
+        <span>📖</span> My Ledger
+      </a>
+      <a class="nav-item" onclick="switchView('student', this)">
+        <span>📈</span> Progress <span class="nav-badge">new</span>
+      </a>
+      <a class="nav-item" onclick="openSoloMode()">
+        <span>🧘</span> Solo Mode
+      </a>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">Instructor</div>
+      <a class="nav-item" onclick="switchView('instructor', this)">
+        <span>🗺️</span> Class Heatmap
+      </a>
+      <a class="nav-item" onclick="switchView('instructor', this)">
+        <span>📊</span> Reports
+      </a>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">System</div>
+      <a class="nav-item" onclick="switchView('student', this)">
+        <span>⚙️</span> Settings
+      </a>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="scout-status">
+        <div class="status-dot"></div>
+        <span>Scout is watching</span>
+      </div>
+      <div class="offline-label">offline · all data on device</div>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <header class="topbar">
+      <div class="top-left">
+        <h1 id="page-title">Your Learning Ledger</h1>
+        <p id="page-sub">Today · Data Structures & Algorithms</p>
+      </div>
+      <div class="top-right">
+        <button class="btn-ghost" onclick="fetchState()">🔄 Refresh Data</button>
+        <button class="btn-primary" onclick="openSoloMode()">🧘 Solo Mode</button>
+      </div>
+    </header>
+
+    <!-- Student View -->
+    <div id="student-view" class="view-section active content">
+      
+      <div class="tab-row">
+        <button class="tab-pill active" onclick="switchTab(this)">Ledger</button>
+        <button class="tab-pill" onclick="switchTab(this)">Timeline</button>
+        <button class="tab-pill" onclick="switchTab(this)">Insights</button>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-card amber">
+          <div class="stat-label">On Loan</div>
+          <div class="stat-val" id="stat-onloan">0</div>
+          <div class="stat-sub">concepts borrowed from AI</div>
+        </div>
+        <div class="stat-card teal">
+          <div class="stat-label">Owned</div>
+          <div class="stat-val" id="stat-owned">0</div>
+          <div class="stat-sub">cleared concepts</div>
+        </div>
+        <div class="stat-card coral">
+          <div class="stat-label">Persists</div>
+          <div class="stat-val" id="stat-persists">0</div>
+          <div class="stat-sub">needs another session</div>
+        </div>
+        <div class="stat-card ink">
+          <div class="stat-label">Debt Score</div>
+          <div class="stat-val">--%</div>
+          <div class="stat-sub">calculating...</div>
+        </div>
+      </div>
+
+      <div class="grid-2col">
+        
+        <!-- Left: Ledger -->
+        <div class="ledger-container">
+          <div class="section-header">
+            <h2>Concept Ledger</h2>
+            <span class="tag" id="ledger-tag">0 active</span>
+            <button class="btn-ghost filter-btn">Filter ▾</button>
+          </div>
+
+          <div class="ledger-card">
+            <div class="ledger-grid ledger-header">
+              <div>Concept</div>
+              <div>Status</div>
+              <div>Confidence</div>
+              <div>Last Seen</div>
+              <div></div>
+            </div>
+
+            <div id="ledger-body">
+              <!-- Dynamically populated from API -->
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Right: Panels -->
+        <div class="panel-stack">
+          
+          <div class="panel-card">
+            <div class="panel-header">
+              <span class="panel-title">New entry</span>
+              <span class="panel-badge">Scout · E2B</span>
+            </div>
+            <textarea id="scoutInput" class="paste-area" placeholder="Paste AI-generated code or explanations here... Scout will silently extract concepts."></textarea>
+            <div class="panel-footer">
+              <span class="panel-hint">⚡ Tagged instantly · stays on your device</span>
+              <button class="btn-dark" onclick="simulateTag()">Tag concepts</button>
+            </div>
+          </div>
+
+          <div class="panel-card camera-panel">
+            <div class="panel-header">
+              <span class="panel-title">🔬 Show your work to Lens</span>
+              <span class="panel-badge vision">Lens · E4B vision</span>
+            </div>
+            <div class="camera-box">
+              <input type="file" id="lensInput" accept="image/*" onchange="simulateLens()">
+              <span style="font-size: 28px; opacity: 0.4;">📷</span>
+              <p>Upload handwritten notes<br>or diagrams to verify.</p>
+            </div>
+          </div>
+
+          <div class="panel-card sage-card">
+            <h4>🦉 Start a Sage session</h4>
+            <p>Sage will ask you questions — not explain answers — until you can explain it yourself.</p>
+            <div class="sage-buttons" id="sage-quick-buttons">
+              <!-- Populated dynamically based on top debt -->
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Instructor View -->
+    <div id="instructor-view" class="view-section content">
+      <div class="section-header">
+        <h2>Class Heatmap</h2>
+        <span style="font-size: 13px; color: var(--ink-muted); margin-left: -4px;">(anonymised, aggregate only)</span>
+      </div>
+
+      <div class="ledger-card" style="padding: 24px;">
+        <p style="font-size: 13px; color: var(--ink-muted);">Overview of concepts currently 'On Loan' or 'Persisting' across the cohort.</p>
+        
+        <div class="heatmap-grid" id="heatmap-body">
+           <!-- Dynamic -->
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Sage Modal -->
+  <div class="modal-backdrop" id="sageModal" onclick="closeModal(event)">
+    <div class="modal-card" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div class="sage-avatar">🦉</div>
+        <div class="modal-titles">
+          <h2>Sage — Clearing Session</h2>
+          <p id="modalConceptName">Concept</p>
+        </div>
+        <div class="close-btn" onclick="closeModalBtn()">✕</div>
+      </div>
+      
+      <div class="modal-body" id="modalBody">
+        <div class="bubble sage" id="sageQuestion">
+          Let's talk about it.
+        </div>
+        <!-- Bubbles append here -->
+      </div>
+
+      <div class="modal-input-row">
+        <input type="text" class="modal-input" id="modalInput" placeholder="Explain it in your own words..." onkeypress="handleModalEnter(event)">
+        <button class="modal-send" onclick="sendModalReply()">Send &rarr;</button>
+      </div>
+      
+      <div class="modal-footer">
+        <div>Session powered by Sage · Gemma 4 E4B · offline</div>
+        <div class="success-label" id="modalSuccess">✓ Concept owned!</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toasts -->
+  <div id="toast-container"></div>
+
+  <script>
+    // Global State
+    let currentChatHistory = [];
+    let currentModalConcept = "";
+
+    // Data Fetching
+    async function fetchState() {
+      try {
+        const res = await fetch('/api/state');
+        const data = await res.json();
+        renderLedger(data.debts);
+        renderHeatmap(data.heatmap);
+      } catch (e) {
+        showToast('⚠️', 'Connection Error', 'Could not reach backend.');
+      }
+    }
+
+    function renderLedger(debts) {
+      const tbody = document.getElementById('ledger-body');
+      tbody.innerHTML = '';
+      
+      let onLoan = 0; let persists = 0; let owned = 0;
+      
+      debts.forEach(d => {
+        if(d.status === 'on_loan') onLoan++;
+        if(d.status === 'persists') persists++;
+        if(d.status === 'owned') owned++;
+      });
+
+      document.getElementById('stat-onloan').innerText = onLoan;
+      document.getElementById('stat-persists').innerText = persists;
+      document.getElementById('stat-owned').innerText = owned;
+      document.getElementById('ledger-tag').innerText = `${onLoan + persists} active`;
+
+      const quickButtons = document.getElementById('sage-quick-buttons');
+      quickButtons.innerHTML = '';
+
+      debts.forEach((d, i) => {
+        let pillClass = 'amber'; let pillText = 'On Loan'; let confColor = 'var(--amber)';
+        if(d.status === 'persists') { pillClass = 'coral'; pillText = 'Persists'; confColor = 'var(--coral)'; }
+        if(d.status === 'owned') { pillClass = 'teal'; pillText = 'Owned'; confColor = 'var(--teal)'; }
+
+        // add quick button for first 3
+        if(i < 3 && d.status !== 'owned') {
+            quickButtons.innerHTML += `<button class="btn-ghost" onclick="openModal('${d.concept}')">${d.concept}</button>`;
+        }
+
+        const dateStr = new Date(d.timestamp).toLocaleDateString();
+        const confPercent = Math.round((d.confidence || 0.5) * 100);
+
+        tbody.innerHTML += `
+          <div class="ledger-grid ledger-row" onclick="openModal('${d.concept}')">
+            <div class="concept-cell">
+              <h3>${d.concept}</h3>
+              <p>${d.source_text ? d.source_text.substring(0,40)+'...' : ''}</p>
+            </div>
+            <div><span class="pill ${pillClass}">${pillText}</span></div>
+            <div>
+              <div class="conf-track"><div class="conf-fill" style="background: ${confColor}; width: ${confPercent}%;"></div></div>
+              <div class="conf-label">${confPercent}%</div>
+            </div>
+            <div class="date-cell">${dateStr}</div>
+            <div><button class="action-btn" aria-label="Open session">→</button></div>
+          </div>
+        `;
+      });
+    }
+
+    function renderHeatmap(heatmap) {
+      const container = document.getElementById('heatmap-body');
+      container.innerHTML = '';
+      heatmap.forEach(h => {
+        let borderClass = 'teal';
+        if(h.count > 5) borderClass = 'amber';
+        if(h.count > 15) borderClass = 'coral';
+        
+        container.innerHTML += `
+          <div class="heatmap-tile ${borderClass}">
+            <div class="tile-val">${h.count}</div>
+            <div class="tile-label">${h.concept}</div>
+          </div>
+        `;
+      });
+    }
+
+    // Call on load
+    window.onload = fetchState;
+
+    // Navigation
+    function switchView(view, el) {
+      document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+      document.getElementById(view + '-view').classList.add('active');
+      el.classList.add('active');
+      document.getElementById('page-title').innerText = view === 'instructor' ? 'Instructor Dashboard' : 'Your Learning Ledger';
+    }
+
+    function switchTab(el) {
+      document.querySelectorAll('.tab-pill').forEach(btn => btn.classList.remove('active'));
+      el.classList.add('active');
+    }
+
+    // Modal Logic
+    function openModal(concept) {
+      currentModalConcept = concept;
+      currentChatHistory = [];
+      document.getElementById('modalConceptName').innerText = concept;
+      
+      const body = document.getElementById('modalBody');
+      body.innerHTML = `<div class="bubble sage" id="sageQuestion">Let's talk about ${concept}. Explain it to me.</div>`;
+      
+      document.getElementById('modalInput').value = '';
+      document.getElementById('modalSuccess').classList.remove('visible');
+      document.getElementById('sageModal').classList.add('open');
+      setTimeout(() => document.getElementById('modalInput').focus(), 300);
+    }
+
+    function closeModal(e) {
+      if(e.target === document.getElementById('sageModal')) closeModalBtn();
+    }
+    function closeModalBtn() {
+      document.getElementById('sageModal').classList.remove('open');
+      fetchState(); // refresh state just in case
+    }
+    function handleModalEnter(e) {
+      if (e.key === 'Enter') sendModalReply();
+    }
+
+    async function sendModalReply() {
+      const input = document.getElementById('modalInput');
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+
+      const body = document.getElementById('modalBody');
+      body.innerHTML += `<div class="bubble student visible">${text}</div>`;
+      body.scrollTop = body.scrollHeight;
+
+      currentChatHistory.push({role: "user", content: text});
+      
+      // Loading indicator bubble
+      const loadingId = "load-" + Date.now();
+      body.innerHTML += `<div class="bubble sage" id="${loadingId}">...</div>`;
+      body.scrollTop = body.scrollHeight;
+
+      try {
+        const res = await fetch('/api/sage/turn', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({concept: currentModalConcept, chat_history: currentChatHistory})
+        });
+        const data = await res.json();
+        
+        document.getElementById(loadingId).remove();
+        body.innerHTML += `<div class="bubble sage">${data.response}</div>`;
+        body.scrollTop = body.scrollHeight;
+
+        currentChatHistory.push({role: "assistant", content: data.response});
+
+        if(data.cleared) {
+            document.getElementById('modalSuccess').classList.add('visible');
+            showToast('🎉', 'Concept Owned!', 'Your ledger has been updated.');
+            setTimeout(() => closeModalBtn(), 2500);
+        }
+      } catch(e) {
+        document.getElementById(loadingId).innerText = "Error connecting to Sage.";
+      }
+    }
+
+    // Toasts & Actions
+    function showToast(icon, title, sub) {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      toast.innerHTML = `<div class="toast-icon">${icon}</div><div class="toast-content"><h5>${title}</h5><p>${sub}</p></div>`;
+      container.appendChild(toast);
+      setTimeout(() => { toast.classList.add('hide'); setTimeout(() => toast.remove(), 300); }, 3500);
+    }
+
+    async function simulateTag() {
+      const val = document.getElementById('scoutInput').value;
+      if(!val) { showToast('⚠️', 'Empty input', 'Please paste something first.'); return; }
+      
+      document.getElementById('scoutInput').value = '';
+      showToast('⚡', 'Scout is analyzing', 'This will take a few seconds...');
+      
+      try {
+        await fetch('/api/scout', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({text: val})
+        });
+        setTimeout(() => {
+          showToast('✅', 'Analysis complete', 'Refresh your dashboard in a moment.');
+          fetchState();
+        }, 5000); // Simulate background delay before fetch
+      } catch(e) {
+        showToast('❌', 'Error', 'Failed to tag concepts.');
+      }
+    }
+
+    async function simulateLens() {
+      const input = document.getElementById('lensInput');
+      if(!input.files.length) return;
+
+      const file = input.files[0];
+      const formData = new FormData();
+      formData.append('file', file);
+      // We don't have a specific concept selected in the UI for lens upload, just asking generally
+      // But API requires it, so we'll pass "General" or we could prompt the user.
+      const targetConcept = prompt("What concept are you verifying?") || "General";
+      formData.append('concept', targetConcept);
+
+      showToast('🔬', 'Lens is analyzing...', 'Please wait.');
+      
+      try {
+        const res = await fetch('/api/lens/verify', { method: 'POST', body: formData });
+        const data = await res.json();
+        
+        if(data.explanation && data.width > 0) {
+            showToast('📌', 'Lens found an error', data.explanation);
+        } else {
+            showToast('✅', 'Lens verification', 'No visual logic failures detected.');
+        }
+        fetchState();
+      } catch(e) {
+        showToast('❌', 'Lens Error', 'Failed to verify image.');
+      }
+    }
+
+    function openSoloMode() {
+      showToast('🧘', 'Solo Mode activated', 'Scout is paused. No AI assistance.');
+    }
+  </script>
+</body>
+</html>

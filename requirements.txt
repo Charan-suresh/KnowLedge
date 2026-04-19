@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+python-multipart
+httpx
+ollama
+chromadb
+pdfplumber
+pillow
+pandas
+jinja2
+python-dotenv
