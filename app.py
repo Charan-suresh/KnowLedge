@@ -11,16 +11,16 @@ import pandas as pd
 # ─────────────────────────────────────────────────────────────────────────────
 
 SAMPLE_LEDGER: List[Dict[str, Any]] = [
-    {"concept": "Recursion base case", "status": "on_loan", "confidence": 0.92, "source_text": "Borrowed from AI explanation"},
-    {"concept": "Binary search invariants", "status": "clear", "confidence": 0.88, "source_text": "Explained in own words"},
-    {"concept": "Gradient descent", "status": "persists", "confidence": 0.79, "source_text": "Needs another clearing session"},
-    {"concept": "RAG retrieval", "status": "on_loan", "confidence": 0.84, "source_text": "Added during prompt work"},
+    {"concept": "Research Capstone Project", "status": "on_loan", "confidence": 0.92, "source_text": "Borrowed from AI explanation"},
+    {"concept": "AP English 12 Themes", "status": "clear", "confidence": 0.88, "source_text": "Explained in own words"},
+    {"concept": "Calculus AB Limits", "status": "persists", "confidence": 0.79, "source_text": "Needs another clearing session"},
+    {"concept": "Biology Lab Analysis", "status": "on_loan", "confidence": 0.84, "source_text": "Added during prompt work"},
 ]
 
 SAMPLE_HEATMAP = [
-    {"concept": "Recursion base case", "count": 9},
-    {"concept": "Binary search invariants", "count": 4},
-    {"concept": "Gradient descent", "count": 7},
+    {"concept": "Research Capstone Project", "count": 9},
+    {"concept": "AP English 12 Themes", "count": 4},
+    {"concept": "Calculus AB Limits", "count": 7},
 ]
 
 SAMPLE_METRICS = {
@@ -56,7 +56,7 @@ def scout_demo(pasted_text: str) -> Tuple[str, str]:
         return "", "Paste some text to see Scout extract concepts."
     
     extracted_concepts = []
-    keywords = ["recursion", "binary search", "gradient descent", "rag", "algorithm", "model", "training", "inference"]
+    keywords = ["capstone project", "english 12", "calculus", "biology", "research", "AP course", "history", "lab analysis"]
     for keyword in keywords:
         if keyword.lower() in pasted_text.lower():
             extracted_concepts.append(keyword.capitalize())
@@ -196,8 +196,8 @@ with gr.Blocks(
             
             concept_input = gr.Textbox(
                 label="Concept to clear",
-                placeholder="e.g., 'Binary Search'",
-                value="Recursion",
+                placeholder="e.g., 'AP English 12'",
+                value="Research Capstone Project",
             )
             
             response_input = gr.Textbox(

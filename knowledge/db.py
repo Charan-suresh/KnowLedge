@@ -195,14 +195,14 @@ def seed_demo_data_if_empty() -> bool:
             return False
 
         rows = [
-            ("Recursion Base Case", "Missing base case in recursive Fibonacci implementation", 0.92, "on_loan", "-13 days"),
-            ("Binary Search Invariants", "Search bounds were not updated correctly", 0.87, "persists", "-12 days"),
-            ("Hash Map Collision", "Chaining vs open addressing tradeoff explanation", 0.78, "clear", "-11 days"),
-            ("Big O Notation", "Confused O(n log n) with O(log n)", 0.84, "clear", "-10 days"),
-            ("Dynamic Programming", "Could not justify overlapping subproblems", 0.81, "on_loan", "-9 days"),
-            ("Graph Traversal", "BFS visited-set placement mistake", 0.89, "on_loan", "-7 days"),
-            ("SQL Join Semantics", "LEFT JOIN filtering applied in WHERE", 0.76, "persists", "-5 days"),
-            ("Pointer Aliasing", "Mutating shared references unexpectedly", 0.74, "on_loan", "-2 days"),
+            ("Research Capstone Project", "Missing clear hypothesis in the proposal", 0.92, "on_loan", "-13 days"),
+            ("AP English 12 Themes", "Confused central theme of the assigned literature", 0.87, "persists", "-12 days"),
+            ("Calculus AB Limits", "Incorrect evaluation of limits at infinity", 0.78, "clear", "-11 days"),
+            ("Biology Lab Analysis", "Failed to properly identify the cellular structures", 0.84, "clear", "-10 days"),
+            ("World History Revolutions", "Could not explain the socioeconomic causes", 0.81, "on_loan", "-9 days"),
+            ("Civics & Government", "Misidentified checks and balances in action", 0.89, "on_loan", "-7 days"),
+            ("Physics Mechanics", "Newton's laws misapplied in free body diagram", 0.76, "persists", "-5 days"),
+            ("Chemistry Bonding", "Covalent vs ionic properties confused", 0.74, "on_loan", "-2 days"),
         ]
 
         for concept, source_text, confidence, status, offset in rows:
