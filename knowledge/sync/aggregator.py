@@ -1,6 +1,6 @@
 import hashlib
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Dict, Any, List
 
 from .. import config
@@ -8,7 +8,7 @@ from .. import db
 
 
 def current_week_label(now: datetime | None = None) -> str:
-    dt = now or datetime.utcnow()
+    dt = now or datetime.now(UTC)
     year, week, _ = dt.isocalendar()
     return f"{year}-W{week:02d}"
 

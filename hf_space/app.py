@@ -1,51 +1,48 @@
-import json
-import gradio as gr
+from fastapi import FastAPI
+from pydantic import BaseModel
 from inference import generate_text, generate_with_image, health_check
+import uvicorn
 
-def api_generate(payload_str: str) -> str:
-    try:
-        data = json.loads(payload_str)
-        model = data.get("model", "")
-        model_name = "e2b" if "e2b" in model.lower() else "e4b"
-        prompt = data.get("prompt", "")
-        max_tokens = data.get("max_tokens", 512)
-        response = generate_text(model_name, prompt, max_tokens)
-        return json.dumps({"response": response})
-    except Exception as e:
-        return json.dumps({"error": str(e)})
+app = FastAPI()
 
-def api_generate_vision(payload_str: str) -> str:
-    try:
-        data = json.loads(payload_str)
-        prompt = data.get("prompt", "")
-        image_base64 = data.get("image_base64", "")
-        max_tokens = data.get("max_tokens", 512)
-        response = generate_with_image(prompt, image_base64, max_tokens)
-        return json.dumps({"response": response})
-    except Exception as e:
-        return json.dumps({"error": str(e)})
 
-def api_health() -> str:
-    try:
-        status = health_check()
-        return json.dumps(status)
-    except Exception as e:
-        return json.dumps({"status": "error", "error": str(e)})
+class GenerateRequest(BaseModel):
+    prompt: str
+    model: str = "e2b"
+    max_tokens: int = 512
 
-with gr.Blocks() as demo:
-    gr.Markdown("# KnowLedge Inference API\nThis Space serves as the LLM backend for the KnowLedge platform.")
-    
-    # Expose APIs (hidden in UI)
-    gen_in = gr.Textbox(visible=False)
-    gen_out = gr.Textbox(visible=False)
-    gr.Button("Generate", visible=False).click(api_generate, inputs=[gen_in], outputs=[gen_out], api_name="generate")
-    
-    vis_in = gr.Textbox(visible=False)
-    vis_out = gr.Textbox(visible=False)
-    gr.Button("Generate Vision", visible=False).click(api_generate_vision, inputs=[vis_in], outputs=[vis_out], api_name="generate_vision")
-    
-    health_out = gr.Textbox(visible=False)
-    gr.Button("Health", visible=False).click(api_health, inputs=[], outputs=[health_out], api_name="health")
+
+class VisionRequest(BaseModel):
+    prompt: str
+    image_base64: str
+    max_tokens: int = 512
+
+
+@app.get("/")
+def root():
+    return {"message": "KnowLedge Inference API is running"}
+
+
+@app.get("/api/health")
+def health():
+    return health_check()
+
+
+@app.post("/api/generate")
+def generate(req: GenerateRequest):
+    model_name = "e2b" if "e2b" in req.model.lower() else "e4b"
+    response = generate_text(model_name, req.prompt, req.max_tokens)
+    return {"response": response}
+
+
+@app.post("/api/generate_vision")
+def generate_vision(req: VisionRequest):
+    response = generate_with_image(
+        req.prompt,
+        req.image_base64,
+        req.max_tokens,
+    )
+    return {"response": response}
 
 if __name__ == "__main__":
-    demo.launch()
+    uvicorn.run(app, host="0.0.0.0", port=7860)

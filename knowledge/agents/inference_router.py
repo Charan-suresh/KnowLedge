@@ -95,6 +95,18 @@ async def check_health() -> bool:
     return await _get_client().check_health()
 
 
+async def get_health_status() -> Dict[str, Any]:
+    client = _get_client()
+    if hasattr(client, "get_health_status"):
+        return await client.get_health_status()
+    reachable = await client.check_health()
+    return {
+        "reachable": reachable,
+        "error": None if reachable else "Backend health check returned false",
+        "response": None,
+    }
+
+
 async def generate_stream(
     model: str, prompt: str, max_tokens: int = 512
 ) -> AsyncGenerator[dict, None]:

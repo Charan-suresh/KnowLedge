@@ -7,17 +7,27 @@ import httpx
 
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent
+DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434"
+
+# App
+PORT = int(os.getenv("PORT", "8000"))
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+IS_PRODUCTION = ENVIRONMENT == "production"
+BUILD_COMMIT = os.getenv("RENDER_GIT_COMMIT", os.getenv("GIT_COMMIT", ""))
+BUILD_BRANCH = os.getenv("RENDER_GIT_BRANCH", os.getenv("GIT_BRANCH", ""))
+RENDER_SERVICE_NAME = os.getenv("RENDER_SERVICE_NAME", "")
 
 
 def _normalize_host(host: str) -> str:
 	value = (host or "").strip().rstrip("/")
-	return value or "http://localhost:11434"
+	return value or DEFAULT_OLLAMA_BASE_URL
 
 
 # Inference
-OLLAMA_BASE_URL = _normalize_host(os.getenv("OLLAMA_BASE_URL", os.getenv("OLLAMA_HOST", "http://localhost:11434")))
+_default_backend = "hf_space" if IS_PRODUCTION else "ollama"
+OLLAMA_BASE_URL = _normalize_host(os.getenv("OLLAMA_BASE_URL", os.getenv("OLLAMA_HOST", DEFAULT_OLLAMA_BASE_URL)))
 OLLAMA_AUTH_TOKEN = os.getenv("OLLAMA_AUTH_TOKEN", "")
-INFERENCE_BACKEND = os.getenv("INFERENCE_BACKEND", "ollama")
+INFERENCE_BACKEND = os.getenv("INFERENCE_BACKEND", _default_backend)
 HF_SPACE_URL = os.getenv("HF_SPACE_URL", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
@@ -34,11 +44,6 @@ EXAMINER_MODEL = LENS_MODEL
 # Storage
 DB_PATH = os.getenv("DB_PATH", str(PROJECT_ROOT / "knowledge.db"))
 CHROMA_PATH = os.getenv("CHROMA_PATH", str(PROJECT_ROOT / "chroma_store"))
-
-# App
-PORT = int(os.getenv("PORT", "8000"))
-ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
-IS_PRODUCTION = ENVIRONMENT == "production"
 
 # Security
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-in-production")

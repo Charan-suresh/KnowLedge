@@ -1,6 +1,7 @@
 import sys
 import os
-from typing import List, Dict, Any
+import logging
+from typing import List, Dict, Any, Optional
 from . import config
 
 try:
@@ -18,15 +19,39 @@ except ImportError:
 
 
 _collection = None
+_vectorstore_disabled = False
+_vectorstore_disable_reason = ""
+logger = logging.getLogger(__name__)
 
-def init_vectorstore() -> chromadb.Collection:
+
+def _disable_vectorstore(reason: str) -> None:
+    global _vectorstore_disabled, _vectorstore_disable_reason
+    if not _vectorstore_disabled:
+        _vectorstore_disabled = True
+        _vectorstore_disable_reason = reason
+        logger.warning("Disabling Chroma RAG: %s", reason)
+
+
+def _ollama_embeddings_expected() -> bool:
+    return config.OLLAMA_BASE_URL != config.DEFAULT_OLLAMA_BASE_URL or config.INFERENCE_BACKEND == "ollama"
+
+
+def init_vectorstore() -> Optional[chromadb.Collection]:
     """
     Initializes and returns the ChromaDB persistent collection.
     Uses local Ollama for generating embeddings.
     """
-    global _collection
+    global _collection, _vectorstore_disabled
     if _collection is not None:
         return _collection
+    if _vectorstore_disabled:
+        return None
+
+    if not _ollama_embeddings_expected():
+        _disable_vectorstore(
+            f"Ollama embeddings are not configured for backend '{config.INFERENCE_BACKEND}'."
+        )
+        return None
 
     try:
         client = chromadb.PersistentClient(path=config.CHROMA_PATH)
@@ -42,12 +67,11 @@ def init_vectorstore() -> chromadb.Collection:
         )
         return _collection
     except Exception as e:
-        print(f"Error initializing ChromaDB: {e}")
-        print("If Ollama is not running, mention: ollama serve")
-        sys.exit(1)
+        _disable_vectorstore(str(e))
+        return None
 
 # Backward compatibility alias
-def get_collection() -> chromadb.Collection:
+def get_collection() -> Optional[chromadb.Collection]:
     return init_vectorstore()
 
 def extract_text_from_file(file_path: str) -> str:
@@ -147,6 +171,8 @@ def ingest_file(file_path: str, source_label: str) -> int:
     metadatas = [{"source": source_label, "chunk_index": i} for i in range(len(chunks))]
 
     collection = init_vectorstore()
+    if collection is None:
+        return 0
     
     try:
         collection.add(
@@ -156,8 +182,7 @@ def ingest_file(file_path: str, source_label: str) -> int:
         )
         return len(chunks)
     except Exception as e:
-        print(f"Error ingesting to ChromaDB: {e}")
-        print("Ensure Ollama is running: ollama serve")
+        _disable_vectorstore(str(e))
         return 0
 
 # For backward compatibility
@@ -170,6 +195,8 @@ def list_sources() -> List[str]:
     """
     try:
         collection = init_vectorstore()
+        if collection is None:
+            return []
         results = collection.get(include=["metadatas"])
         metas = results.get("metadatas", [])
         if not metas:
@@ -190,6 +217,8 @@ def delete_source(source_label: str):
     """
     try:
         collection = init_vectorstore()
+        if collection is None:
+            return
         collection.delete(where={"source": source_label})
         print(f"Deleted source: {source_label}")
     except Exception as e:
@@ -201,6 +230,8 @@ def query_context(query: str, n_results: int = 3) -> List[Dict[str, Any]]:
     Returns a structured list containing documents/texts, metadata, and distances.
     """
     collection = init_vectorstore()
+    if collection is None:
+        return []
     formatted_results = []
     
     try:
@@ -225,8 +256,6 @@ def query_context(query: str, n_results: int = 3) -> List[Dict[str, Any]]:
             })
             
     except Exception as e:
-        print(f"Error querying ChromaDB: {e}")
-        print("Ensure Ollama is running: ollama serve")
+        _disable_vectorstore(str(e))
         
     return formatted_results
-

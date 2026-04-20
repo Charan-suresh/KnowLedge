@@ -26,11 +26,34 @@ from .sync.audit_log import get_sync_audit
 from .routers import progress, reports
 from .routers.ingest import router as ingest_router
 from .routers.classroom import router as classroom_router
-from .agents.inference_router import check_health
+from .agents.inference_router import check_health, get_health_status
 from .integrity.session_fingerprint import generate_device_key_if_missing
 
 logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parent
+
+
+def _log_startup_config_warnings() -> None:
+    if not config.IS_PRODUCTION:
+        return
+
+    if config.INFERENCE_BACKEND == "ollama" and config.OLLAMA_BASE_URL == config.DEFAULT_OLLAMA_BASE_URL:
+        logger.warning(
+            "Production is configured for local Ollama at %s. Set INFERENCE_BACKEND=hf_space "
+            "or provide a reachable remote OLLAMA_BASE_URL.",
+            config.OLLAMA_BASE_URL,
+        )
+
+    if config.INFERENCE_BACKEND == "hf_space" and not config.HF_SPACE_URL:
+        logger.error(
+            "Production is configured for hf_space but HF_SPACE_URL is empty. "
+            "Set HF_SPACE_URL to the deployed Hugging Face Space id or URL."
+        )
+
+    if config.INFERENCE_BACKEND != "ollama" and config.OLLAMA_BASE_URL == config.DEFAULT_OLLAMA_BASE_URL:
+        logger.info(
+            "Ollama embeddings are not configured in production; Chroma RAG will be skipped."
+        )
 
 
 def _base_context(extra: Dict[str, Any] | None = None) -> Dict[str, Any]:
@@ -106,6 +129,7 @@ async def lifespan(app_instance: FastAPI):
     db.init_db()
     db.run_migrations()
     generate_device_key_if_missing()
+    _log_startup_config_warnings()
     if config.DEMO_MODE:
         db.seed_demo_data_if_empty()
     config.load_runtime_llm_config(db.get_llm_settings())
@@ -197,13 +221,19 @@ async def read_help(request: Request):
 
 @app.get("/health")
 async def health():
-    backend_ok = await check_health()
+    backend = await get_health_status()
     return {
         "status": "ok",
         "environment": config.ENVIRONMENT,
         "inference_backend": config.INFERENCE_BACKEND,
-        "backend_reachable": backend_ok,
+        "backend_reachable": backend.get("reachable", False),
+        "backend_error": backend.get("error"),
+        "backend_base_url": backend.get("base_url"),
+        "backend_response": backend.get("response"),
         "hf_space_url": config.HF_SPACE_URL if config.INFERENCE_BACKEND == "hf_space" else None,
+        "build_commit": config.BUILD_COMMIT or None,
+        "build_branch": config.BUILD_BRANCH or None,
+        "render_service_name": config.RENDER_SERVICE_NAME or None,
     }
 
 
@@ -256,7 +286,7 @@ async def get_debt_score():
 @app.get("/api/llm/config")
 async def get_llm_config():
     runtime = config.get_runtime_llm_config()
-    models = config.fetch_ollama_models(runtime["ollama_base_url"])
+    models = config.fetch_ollama_models(runtime["ollama_base_url"]) if config.INFERENCE_BACKEND == "ollama" else []
     return {
         **runtime,
         "available_models": models

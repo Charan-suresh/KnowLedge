@@ -61,7 +61,7 @@ echo "  https://huggingface.co/spaces/$(huggingface-cli whoami)/knowledge-infere
 # After deployment (~3-5 minutes for build), your endpoints are:
 # Text:   POST https://your-username-knowledge-inference.hf.space/api/generate
 # Vision: POST https://your-username-knowledge-inference.hf.space/api/generate_vision
-# Health: POST https://your-username-knowledge-inference.hf.space/api/health
+# Health: GET  https://your-username-knowledge-inference.hf.space/api/health
 
 # -- Step 7: Set Render env vars ---------------------------------------------
 # In Render dashboard -> your service -> Environment:
