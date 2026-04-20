@@ -12,7 +12,7 @@ import asyncio
 from typing import AsyncGenerator, Optional
 from . import db
 from . import config
-from .agents.ollama_client import stream_chat
+from .agents.inference_router import stream_chat
 
 # RAG retrieval — gracefully skipped if vectorstore not ready
 try:

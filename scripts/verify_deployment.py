@@ -12,13 +12,45 @@ import httpx
 
 async def verify(base_url: str) -> bool:
     checks = []
+    health_data = {}
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
             response = await client.get(f"{base_url}/health")
-            data = response.json()
-            checks.append(("App health", response.status_code == 200, data.get("status")))
-            checks.append(("Ollama reachable from app", data.get("ollama") == "reachable", data.get("ollama")))
+            health_data = response.json() if response.status_code == 200 else {}
+            checks.append(("App health", response.status_code == 200, health_data.get("status")))
+
+            backend = health_data.get("inference_backend", "unknown")
+            backend_ok = health_data.get("backend_reachable", False)
+            checks.append(
+                (
+                    f"Inference backend ({backend})",
+                    backend_ok,
+                    "reachable" if backend_ok else "UNREACHABLE",
+                )
+            )
+
+            if backend == "hf_space":
+                try:
+                    response2 = await client.post(
+                        f"{base_url}/api/v1/ingest",
+                        json={
+                            "source": "verify_script",
+                            "content": "A recursive function calls itself with a base case.",
+                            "assignment_id": "smoke-test",
+                            "course_id": "CS301",
+                        },
+                    )
+                    tagged = response2.json().get("status") == "queued"
+                    checks.append(
+                        (
+                            "HF Space inference smoke test",
+                            tagged,
+                            "Scout queued" if tagged else "failed",
+                        )
+                    )
+                except Exception as exc:
+                    checks.append(("HF Space inference smoke test", False, str(exc)))
         except Exception as exc:
             checks.append(("App health", False, str(exc)))
 

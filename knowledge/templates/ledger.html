@@ -368,7 +368,7 @@
     
     document.getElementById('scoutInput').value = '';
     showToast('⚡', 'Scout is analyzing', 'This will take a few seconds...');
-    window.startColdStartTimer();
+    window.startColdStartTimer('{{ inference_backend }}');
     
     try {
       await fetch('/api/scout', {

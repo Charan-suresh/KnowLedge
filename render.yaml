@@ -24,6 +24,12 @@ services:
         sync: false
       - key: OLLAMA_AUTH_TOKEN
         sync: false
+      - key: INFERENCE_BACKEND
+        value: hf_space
+      - key: HF_SPACE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
       - key: SECRET_KEY
         generateValue: true
       - key: SCOUT_MODEL

@@ -17,6 +17,9 @@ def _normalize_host(host: str) -> str:
 # Inference
 OLLAMA_BASE_URL = _normalize_host(os.getenv("OLLAMA_BASE_URL", os.getenv("OLLAMA_HOST", "http://localhost:11434")))
 OLLAMA_AUTH_TOKEN = os.getenv("OLLAMA_AUTH_TOKEN", "")
+INFERENCE_BACKEND = os.getenv("INFERENCE_BACKEND", "ollama")
+HF_SPACE_URL = os.getenv("HF_SPACE_URL", "")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 SCOUT_MODEL = os.getenv("SCOUT_MODEL", "gemma4:e2b")
 SAGE_MODEL = os.getenv("SAGE_MODEL", "gemma4:e4b")

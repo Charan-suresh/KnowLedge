@@ -5,7 +5,7 @@ from typing import Optional
 from PIL import Image
 import io
 from . import config
-from .agents.ollama_client import chat
+from .agents.inference_router import chat
 
 @dataclass
 class ExaminerResult:

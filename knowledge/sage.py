@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import List, Dict, Any
 from . import config
-from .agents.ollama_client import chat
+from .agents.inference_router import chat
 
 @dataclass
 class ClearingResult:

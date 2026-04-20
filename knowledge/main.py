@@ -26,7 +26,7 @@ from .sync.audit_log import get_sync_audit
 from .routers import progress, reports
 from .routers.ingest import router as ingest_router
 from .routers.classroom import router as classroom_router
-from .agents.ollama_client import check_health
+from .agents.inference_router import check_health
 from .integrity.session_fingerprint import generate_device_key_if_missing
 
 logger = logging.getLogger(__name__)
@@ -37,6 +37,7 @@ def _base_context(extra: Dict[str, Any] | None = None) -> Dict[str, Any]:
     payload: Dict[str, Any] = {
         "is_production": config.IS_PRODUCTION,
         "demo_mode": config.DEMO_MODE,
+        "inference_backend": config.INFERENCE_BACKEND,
     }
     if extra:
         payload.update(extra)
@@ -45,6 +46,9 @@ def _base_context(extra: Dict[str, Any] | None = None) -> Dict[str, Any]:
 
 async def warm_ollama() -> None:
     """Pull required models on Cloud Run if missing. Safe and idempotent."""
+    if config.INFERENCE_BACKEND != "ollama":
+        return
+
     models_needed = list({config.SCOUT_MODEL, config.SAGE_MODEL})
     headers = {"Authorization": f"Bearer {config.OLLAMA_AUTH_TOKEN}"} if config.OLLAMA_AUTH_TOKEN else {}
 
@@ -193,12 +197,13 @@ async def read_help(request: Request):
 
 @app.get("/health")
 async def health():
-    ollama_ok = await check_health()
+    backend_ok = await check_health()
     return {
         "status": "ok",
         "environment": config.ENVIRONMENT,
-        "ollama": "reachable" if ollama_ok else "unreachable",
-        "ollama_url": config.OLLAMA_BASE_URL,
+        "inference_backend": config.INFERENCE_BACKEND,
+        "backend_reachable": backend_ok,
+        "hf_space_url": config.HF_SPACE_URL if config.INFERENCE_BACKEND == "hf_space" else None,
     }
 
 

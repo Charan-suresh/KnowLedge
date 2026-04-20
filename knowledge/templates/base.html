@@ -20,7 +20,7 @@
   {% endif %}
 
   <div id="cold-start-banner" style="display:none;background:var(--cream-deep);border:1px solid var(--rule);border-radius:var(--radius);padding:16px 20px;margin:24px 36px;font-family:'DM Mono',monospace;font-size:12px;color:var(--ink-muted);">
-    <span id="cold-start-msg">Waking up Gemma 4 on Cloud Run GPU...</span>
+    <span id="cold-start-msg">Waking up Gemma 4 on Hugging Face H200 GPU...</span>
     <span style="margin-left:8px" id="cold-start-dots">●○○</span>
   </div>
 
@@ -130,13 +130,20 @@
     const coldDots = ['●○○', '○●○', '○○●'];
     let coldDotIdx = 0;
 
-    window.startColdStartTimer = function() {
+    window.startColdStartTimer = function(backend) {
       const banner = document.getElementById('cold-start-banner');
       if (!banner) return;
+      const messages = {
+        hf_space: 'Waking up Gemma 4 on Hugging Face H200 GPU...',
+        gemini_api: 'Connecting to Gemini API...',
+        ollama: 'Loading Gemma 4 locally...'
+      };
       clearTimeout(coldStartTimer);
       clearInterval(coldStartDotsTimer);
       coldStartTimer = setTimeout(() => {
         banner.style.display = 'block';
+        const msg = document.getElementById('cold-start-msg');
+        if (msg) msg.textContent = messages[backend] || 'Starting inference engine...';
         coldStartDotsTimer = setInterval(() => {
           const dotsEl = document.getElementById('cold-start-dots');
           if (dotsEl) dotsEl.textContent = coldDots[coldDotIdx++ % coldDots.length];
@@ -335,7 +342,7 @@
 
       let fullReply = "";
       let cleared = false;
-      window.startColdStartTimer();
+      window.startColdStartTimer('{{ inference_backend }}');
 
       try {
         const es = new EventSource(url);
