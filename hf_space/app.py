@@ -1,7 +1,11 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-from inference import generate_text, generate_with_image, health_check
 import uvicorn
+
+try:
+    from inference import generate_text, generate_with_image, health_check
+except ModuleNotFoundError:
+    from .inference import generate_text, generate_with_image, health_check
 
 app = FastAPI()
 
@@ -25,24 +29,33 @@ def root():
 
 @app.get("/api/health")
 def health():
-    return health_check()
+    try:
+        return health_check()
+    except Exception as exc:
+        return {"status": "error", "error": str(exc)}
 
 
 @app.post("/api/generate")
 def generate(req: GenerateRequest):
-    model_name = "e2b" if "e2b" in req.model.lower() else "e4b"
-    response = generate_text(model_name, req.prompt, req.max_tokens)
-    return {"response": response}
+    try:
+        model_name = "e2b" if "e2b" in req.model.lower() else "e4b"
+        response = generate_text(model_name, req.prompt, req.max_tokens)
+        return {"response": response}
+    except Exception as exc:
+        return {"error": str(exc)}
 
 
 @app.post("/api/generate_vision")
 def generate_vision(req: VisionRequest):
-    response = generate_with_image(
-        req.prompt,
-        req.image_base64,
-        req.max_tokens,
-    )
-    return {"response": response}
+    try:
+        response = generate_with_image(
+            req.prompt,
+            req.image_base64,
+            req.max_tokens,
+        )
+        return {"response": response}
+    except Exception as exc:
+        return {"error": str(exc)}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=7860)
