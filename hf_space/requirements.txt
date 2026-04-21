@@ -4,7 +4,7 @@ gradio==4.44.1
 
 # Inference — E4B via llama-cpp-python (GGUF, CPU-only, no ZeroGPU needed)
 --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
-llama-cpp-python>=0.2.90
+llama-cpp-python==0.2.90
 
 # Utilities
 Pillow

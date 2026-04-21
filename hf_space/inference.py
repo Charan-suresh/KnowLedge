@@ -30,9 +30,11 @@ except ModuleNotFoundError:
     spaces = _SpacesStub()
 
 # ── llama-cpp-python ──────────────────────────────────────────────────────────
+# Import failures can happen when the wheel was built against the wrong libc.
+# Keep the module importable so the app can start and report a controlled error.
 try:
     from llama_cpp import Llama
-except ModuleNotFoundError:
+except Exception:
     Llama = None
 
 
