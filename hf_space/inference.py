@@ -50,10 +50,10 @@ def load_model():
                 "llama-cpp-python is not installed. "
                 "Add it to hf_space/requirements.txt."
             )
-        model_path = hf_hub_download(
+        model_path = str(hf_hub_download(
             repo_id=MODEL_REPO,
             filename=MODEL_FILE
-        )
+        ))
 
         _llm = Llama(
             model_path=model_path,
@@ -69,7 +69,7 @@ def generate_text(model_name: str, prompt: str, max_new_tokens: int = 512) -> st
         llm = load_model()
 
         output = llm(
-            prompt,
+            str(prompt),
             max_tokens=max_new_tokens,
             temperature=0.7,
             top_p=0.95
@@ -90,7 +90,7 @@ def generate_with_image(prompt: str, image_base64: str, max_new_tokens: int = 51
         text_prompt = f"{prompt}\n\n[Image provided]"
 
         output = llm(
-            text_prompt,
+            str(text_prompt),
             max_tokens=max_new_tokens,
             temperature=0.7,
             top_p=0.95
