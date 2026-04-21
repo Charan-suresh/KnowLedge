@@ -32,9 +32,11 @@ except ModuleNotFoundError:
 # ── llama-cpp-python ──────────────────────────────────────────────────────────
 # Import failures can happen when the wheel was built against the wrong libc.
 # Keep the module importable so the app can start and report a controlled error.
+_llama_import_error = None
 try:
     from llama_cpp import Llama
-except Exception:
+except Exception as exc:
+    _llama_import_error = exc
     Llama = None
 
 
@@ -44,14 +46,26 @@ MODEL_FILE = "gemma-4-4b-it-Q4_K_M.gguf"
 _llm = None
 logger = logging.getLogger(__name__)
 
+
+class _FallbackModel:
+    def __call__(self, prompt: str, max_tokens: int = 512, temperature: float = 0.7, top_p: float = 0.95):
+        del temperature, top_p
+        text = (
+            "Inference backend is temporarily running in fallback mode. "
+            "The CPU GGUF loader could not be initialized, so this response is a safe placeholder."
+        )
+        prompt_text = str(prompt).strip()
+        if prompt_text:
+            text += f" Prompt received: {prompt_text[:160]}"
+        return {"choices": [{"text": text[:max_tokens]}]}
+
 def load_model():
     global _llm
     if _llm is None:
         if Llama is None:
-            raise RuntimeError(
-                "llama-cpp-python is not installed. "
-                "Add it to hf_space/requirements.txt."
-            )
+            logger.warning("llama-cpp-python unavailable; using fallback model", exc_info=_llama_import_error)
+            _llm = _FallbackModel()
+            return _llm
         model_path = str(hf_hub_download(
             repo_id=MODEL_REPO,
             filename=MODEL_FILE
