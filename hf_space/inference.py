@@ -1,11 +1,22 @@
+"""
+KnowLedge Inference — inference.py
+
+Runs entirely on CPU on the standard free HF Spaces tier (no ZeroGPU).
+
+Model backends
+--------------
+E4B  : unsloth/gemma-4-4b-it-GGUF loaded via llama-cpp-python (CPU, n_gpu_layers=0).
+"""
+
 import base64
 import io
 import logging
+import os
 
-import torch
 from PIL import Image
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from huggingface_hub import hf_hub_download
 
+# ── spaces stub — GPU decorator is a no-op on the free CPU tier ───────────────
 try:
     import spaces
 except ModuleNotFoundError:
@@ -18,122 +29,75 @@ except ModuleNotFoundError:
 
     spaces = _SpacesStub()
 
-MODEL_E2B = "google/gemma-4-e2b-it"
-MODEL_E4B = "google/gemma-4-e4b-it"
+# ── llama-cpp-python ──────────────────────────────────────────────────────────
+try:
+    from llama_cpp import Llama
+except ModuleNotFoundError:
+    Llama = None
 
-# Module-level cache: loaded once per ZeroGPU session and reused across calls.
-_tokenizer_e2b = None
-_model_e2b = None
-_tokenizer_e4b = None
-_model_e4b = None
+
+MODEL_REPO = "unsloth/gemma-4-4b-it-GGUF"
+MODEL_FILE = "gemma-4-4b-it-Q4_K_M.gguf"
+
+_llm = None
 logger = logging.getLogger(__name__)
 
-
-def _dtype():
-    return torch.bfloat16 if torch.cuda.is_available() else torch.float32
-
-
-def _load_e2b():
-    global _tokenizer_e2b, _model_e2b
-    if _model_e2b is None:
-        _tokenizer_e2b = AutoTokenizer.from_pretrained(
-            MODEL_E2B,
-            trust_remote_code=True,
+def load_model():
+    global _llm
+    if _llm is None:
+        if Llama is None:
+            raise RuntimeError(
+                "llama-cpp-python is not installed. "
+                "Add it to hf_space/requirements.txt."
+            )
+        model_path = hf_hub_download(
+            repo_id=MODEL_REPO,
+            filename=MODEL_FILE
         )
-        _model_e2b = AutoModelForCausalLM.from_pretrained(
-            MODEL_E2B,
-            torch_dtype=_dtype(),
-            device_map="auto",
-            low_cpu_mem_usage=True,
-            trust_remote_code=True,
-        )
-    return _tokenizer_e2b, _model_e2b
 
-
-def _load_e4b():
-    global _tokenizer_e4b, _model_e4b
-    if _model_e4b is None:
-        _tokenizer_e4b = AutoTokenizer.from_pretrained(
-            MODEL_E4B,
-            use_fast=False,
-            trust_remote_code=True,
+        _llm = Llama(
+            model_path=model_path,
+            n_ctx=4096,
+            n_threads=4
         )
-        _model_e4b = AutoModelForCausalLM.from_pretrained(
-            MODEL_E4B,
-            torch_dtype=_dtype(),
-            device_map="auto",
-            low_cpu_mem_usage=True,
-            trust_remote_code=True,
-        )
-    return _tokenizer_e4b, _model_e4b
+    return _llm
 
 
 @spaces.GPU(duration=90)
 def generate_text(model_name: str, prompt: str, max_new_tokens: int = 512) -> str:
-    """Text-only generation for Scout and Sage."""
     try:
-        if model_name == "e2b":
-            tokenizer, model = _load_e2b()
-        else:
-            tokenizer, model = _load_e4b()
+        llm = load_model()
 
-        inputs = tokenizer(
+        output = llm(
             prompt,
-            return_tensors="pt",
-            truncation=True,
-            max_length=4096,
-        ).to(model.device)
+            max_tokens=max_new_tokens,
+            temperature=0.7,
+            top_p=0.95
+        )
 
-        with torch.no_grad():
-            output_ids = model.generate(
-                **inputs,
-                max_new_tokens=max_new_tokens,
-                do_sample=True,
-                temperature=0.7,
-                top_p=0.95,
-                pad_token_id=tokenizer.eos_token_id,
-            )
+        return output["choices"][0]["text"]
 
-        generated = output_ids[0][inputs["input_ids"].shape[1]:]
-        return tokenizer.decode(generated, skip_special_tokens=True)
     except Exception:
-        logger.exception("Text generation failed for model=%s", model_name)
+        logger.exception("Text generation failed")
         raise
 
 
 @spaces.GPU(duration=120)
 def generate_with_image(prompt: str, image_base64: str, max_new_tokens: int = 512) -> str:
-    """Vision generation for Lens."""
     try:
-        tokenizer, model = _load_e4b()
+        llm = load_model()
 
-        image_bytes = base64.b64decode(image_base64)
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        text_prompt = f"{prompt}\n\n[Image provided]"
 
-        # Current Space runtime uses text-only generation path for Gemma 4.
-        # Preserve endpoint compatibility by appending a short image placeholder to the prompt.
-        size_hint = f"{image.width}x{image.height}"
-        text_prompt = f"{prompt}\n\n[Image provided: {size_hint}]"
-
-        inputs = tokenizer(
+        output = llm(
             text_prompt,
-            return_tensors="pt",
-            truncation=True,
-            max_length=4096,
-        ).to(model.device)
+            max_tokens=max_new_tokens,
+            temperature=0.7,
+            top_p=0.95
+        )
 
-        with torch.no_grad():
-            output_ids = model.generate(
-                **inputs,
-                max_new_tokens=max_new_tokens,
-                do_sample=True,
-                temperature=0.7,
-                top_p=0.95,
-                pad_token_id=tokenizer.eos_token_id,
-            )
+        return output["choices"][0]["text"]
 
-        generated = output_ids[0][inputs["input_ids"].shape[1]:]
-        return tokenizer.decode(generated, skip_special_tokens=True)
     except Exception:
         logger.exception("Vision generation failed")
         raise
@@ -141,11 +105,7 @@ def generate_with_image(prompt: str, image_base64: str, max_new_tokens: int = 51
 
 @spaces.GPU(duration=60)
 def health_check() -> dict:
-    """Basic runtime health used by FastAPI /health."""
     return {
         "status": "ok",
-        "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else "none",
-        "cuda": torch.cuda.is_available(),
-        "e2b_loaded": _model_e2b is not None,
-        "e4b_loaded": _model_e4b is not None,
+        "model_loaded": _llm is not None,
     }
