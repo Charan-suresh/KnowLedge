@@ -5,7 +5,7 @@ Runs entirely on CPU on the standard free HF Spaces tier (no ZeroGPU).
 
 Model backends
 --------------
-E4B  : unsloth/gemma-4-4b-it-GGUF loaded via llama-cpp-python (CPU, n_gpu_layers=0).
+Text : Gemma via transformers (CPU-safe, no llama-cpp native binaries).
 """
 
 import base64
@@ -14,7 +14,8 @@ import logging
 import os
 
 from PIL import Image
-from huggingface_hub import hf_hub_download
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 # ── spaces stub — GPU decorator is a no-op on the free CPU tier ───────────────
 try:
@@ -29,73 +30,59 @@ except ModuleNotFoundError:
 
     spaces = _SpacesStub()
 
-# ── llama-cpp-python ──────────────────────────────────────────────────────────
-# Import failures can happen when the wheel was built against the wrong libc.
-# Keep the module importable so the app can start and report a controlled error.
-_llama_import_error = None
-try:
-    from llama_cpp import Llama
-except Exception as exc:
-    _llama_import_error = exc
-    Llama = None
+# ── transformers backend ──────────────────────────────────────────────────────
+TEXT_MODEL_ID = os.getenv("GEMMA_TEXT_MODEL", "google/gemma-2-2b-it")
 
-
-MODEL_REPO = "unsloth/gemma-4-4b-it-GGUF"
-MODEL_FILE = "gemma-4-4b-it-Q4_K_M.gguf"
-
-_llm = None
+_bundle = None
 logger = logging.getLogger(__name__)
 
 
-class _FallbackModel:
-    def __call__(self, prompt: str, max_tokens: int = 512, temperature: float = 0.7, top_p: float = 0.95):
-        del temperature, top_p
-        text = (
-            "Inference backend is temporarily running in fallback mode. "
-            "The CPU GGUF loader could not be initialized, so this response is a safe placeholder."
-        )
-        prompt_text = str(prompt).strip()
-        if prompt_text:
-            text += f" Prompt received: {prompt_text[:160]}"
-        return {"choices": [{"text": text[:max_tokens]}]}
+class _ModelBundle:
+    def __init__(self, tokenizer: AutoTokenizer, model: AutoModelForCausalLM):
+        self.tokenizer = tokenizer
+        self.model = model
 
-def load_model():
-    global _llm
-    if _llm is None:
-        if Llama is None:
-            logger.warning("llama-cpp-python unavailable; using fallback model", exc_info=_llama_import_error)
-            _llm = _FallbackModel()
-            return _llm
+
+def load_model() -> _ModelBundle:
+    global _bundle
+    if _bundle is None:
         try:
-            model_path = str(hf_hub_download(
-                repo_id=MODEL_REPO,
-                filename=MODEL_FILE
-            ))
-
-            _llm = Llama(
-                model_path=model_path,
-                n_ctx=4096,
-                n_threads=4
+            tokenizer = AutoTokenizer.from_pretrained(TEXT_MODEL_ID)
+            model = AutoModelForCausalLM.from_pretrained(
+                TEXT_MODEL_ID,
+                torch_dtype=torch.float32,
             )
-        except Exception:
-            logger.exception("Falling back after llama-cpp initialization failure")
-            _llm = _FallbackModel()
-    return _llm
+            model.eval()
+            _bundle = _ModelBundle(tokenizer=tokenizer, model=model)
+        except Exception as exc:
+            logger.exception("Transformers model initialization failed")
+            raise RuntimeError(
+                f"Failed to initialize transformers model '{TEXT_MODEL_ID}': {exc}"
+            ) from exc
+    return _bundle
 
 
 @spaces.GPU(duration=90)
 def generate_text(model_name: str, prompt: str, max_new_tokens: int = 512) -> str:
+    del model_name
     try:
-        llm = load_model()
+        bundle = load_model()
+        text_prompt = str(prompt)
 
-        output = llm(
-            str(prompt),
-            max_tokens=max_new_tokens,
-            temperature=0.7,
-            top_p=0.95
-        )
+        inputs = bundle.tokenizer(text_prompt, return_tensors="pt")
+        with torch.no_grad():
+            output_ids = bundle.model.generate(
+                **inputs,
+                max_new_tokens=min(max_new_tokens, 256),
+                do_sample=True,
+                temperature=0.7,
+                top_p=0.95,
+                pad_token_id=bundle.tokenizer.eos_token_id,
+            )
 
-        return output["choices"][0]["text"]
+        generated_ids = output_ids[0][inputs["input_ids"].shape[1]:]
+        response = bundle.tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
+        return response or ""
 
     except Exception:
         logger.exception("Text generation failed")
@@ -105,18 +92,9 @@ def generate_text(model_name: str, prompt: str, max_new_tokens: int = 512) -> st
 @spaces.GPU(duration=120)
 def generate_with_image(prompt: str, image_base64: str, max_new_tokens: int = 512) -> str:
     try:
-        llm = load_model()
-
-        text_prompt = f"{prompt}\n\n[Image provided]"
-
-        output = llm(
-            str(text_prompt),
-            max_tokens=max_new_tokens,
-            temperature=0.7,
-            top_p=0.95
-        )
-
-        return output["choices"][0]["text"]
+        _ = Image.open(io.BytesIO(base64.b64decode(image_base64)))
+        text_prompt = f"{prompt}\n\n[Image provided and parsed on client-side.]"
+        return generate_text("e2b", text_prompt, max_new_tokens)
 
     except Exception:
         logger.exception("Vision generation failed")
@@ -127,5 +105,7 @@ def generate_with_image(prompt: str, image_base64: str, max_new_tokens: int = 51
 def health_check() -> dict:
     return {
         "status": "ok",
-        "model_loaded": _llm is not None,
+        "model_loaded": _bundle is not None,
+        "backend": "transformers",
+        "model": TEXT_MODEL_ID,
     }

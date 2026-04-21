@@ -2,9 +2,10 @@ fastapi==0.112.2
 uvicorn==0.30.6
 gradio==4.44.1
 
-# Inference — E4B via llama-cpp-python (GGUF, CPU-only, no ZeroGPU needed)
---extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
-llama-cpp-python==0.2.90
+# Inference backend (pure transformers; avoids native llama-cpp libc issues)
+torch==2.4.1
+transformers==4.44.2
+sentencepiece==0.2.0
 
 # Utilities
 Pillow
