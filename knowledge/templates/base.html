@@ -12,12 +12,7 @@
 </head>
 <body>
 
-  {% if is_production and demo_mode %}
-  <div style="background:#D4820A;color:#fff;text-align:center;padding:8px;font-family:'DM Mono',monospace;font-size:12px;letter-spacing:0.06em;">
-    LIVE DEMO - Gemma 4 E4B running on Google Cloud Run GPU - Data resets every 24h -
-    <a href="https://github.com/yourname/knowledge" style="color:#fff;text-decoration:underline;">View source</a>
-  </div>
-  {% endif %}
+
 
   <div id="cold-start-banner" style="display:none;background:var(--cream-deep);border:1px solid var(--rule);border-radius:var(--radius);padding:16px 20px;margin:24px 36px;font-family:'DM Mono',monospace;font-size:12px;color:var(--ink-muted);">
     <span id="cold-start-msg">Waking up Gemma 4 on Hugging Face H200 GPU...</span>
