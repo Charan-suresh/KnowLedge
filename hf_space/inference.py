@@ -66,16 +66,20 @@ def load_model():
             logger.warning("llama-cpp-python unavailable; using fallback model", exc_info=_llama_import_error)
             _llm = _FallbackModel()
             return _llm
-        model_path = str(hf_hub_download(
-            repo_id=MODEL_REPO,
-            filename=MODEL_FILE
-        ))
+        try:
+            model_path = str(hf_hub_download(
+                repo_id=MODEL_REPO,
+                filename=MODEL_FILE
+            ))
 
-        _llm = Llama(
-            model_path=model_path,
-            n_ctx=4096,
-            n_threads=4
-        )
+            _llm = Llama(
+                model_path=model_path,
+                n_ctx=4096,
+                n_threads=4
+            )
+        except Exception:
+            logger.exception("Falling back after llama-cpp initialization failure")
+            _llm = _FallbackModel()
     return _llm
 
 
