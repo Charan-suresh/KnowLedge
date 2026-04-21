@@ -13,6 +13,7 @@ Deploy it to a separate Hugging Face Space repository, not this Render app.
 import asyncio
 import json
 import os
+import re
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, AsyncGenerator, Dict, List
 
@@ -35,7 +36,7 @@ def _get_client():
 def _messages_to_prompt(messages: List[Dict[str, Any]]) -> str:
     chunks: List[str] = []
     for msg in messages:
-        role = msg.get("role", "user").upper()
+        role = (msg.get("role", "user") or "user").strip().lower()
         content = msg.get("content", "")
         if isinstance(content, list):
             text_parts = []
@@ -43,8 +44,27 @@ def _messages_to_prompt(messages: List[Dict[str, Any]]) -> str:
                 if isinstance(item, dict) and item.get("type") == "text":
                     text_parts.append(item.get("text", ""))
             content = "\n".join(part for part in text_parts if part)
-        chunks.append(f"[{role}]\n{content}")
+
+        if role == "system":
+            chunks.append(f"System instructions:\n{content}")
+        elif role == "assistant":
+            chunks.append(f"Assistant:\n{content}")
+        else:
+            chunks.append(f"User:\n{content}")
+
+    # Keep the model focused on plain conversational output.
+    chunks.append("Assistant:\n")
     return "\n\n".join(chunks)
+
+
+_ROLE_LABEL_RE = re.compile(r"\*\*\[(SYSTEM|USER|ASSISTANT)\]\*\*|\[(SYSTEM|USER|ASSISTANT)\]", re.IGNORECASE)
+
+
+def _sanitize_model_text(text: str) -> str:
+    if not text:
+        return ""
+    cleaned = _ROLE_LABEL_RE.sub("", text)
+    return cleaned.strip()
 
 
 def _build_tooling_instructions(tools: List[Dict[str, Any]], format_name: str | None) -> str:
@@ -123,8 +143,9 @@ async def stream_chat(model: str, messages: List[Dict[str, Any]]) -> AsyncGenera
 
     prompt = _messages_to_prompt(messages)
     async for chunk in client.generate_stream(model=model, prompt=prompt, max_tokens=512):
+        content = _sanitize_model_text(chunk.get("response", ""))
         yield {
-            "message": {"content": chunk.get("response", "")},
+            "message": {"content": content},
             "done": chunk.get("done", False),
         }
 
@@ -158,7 +179,7 @@ async def chat_async(
     else:
         result = await client.generate(model, prompt, 512)
 
-    response_text = result.get("response", "")
+    response_text = _sanitize_model_text(result.get("response", ""))
 
     parsed = _extract_json_object(response_text) if (tools or format == "json") else None
     content = response_text
