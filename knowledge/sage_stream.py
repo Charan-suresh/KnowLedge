@@ -9,6 +9,7 @@ to ground Sage's Socratic questions in real course material.
 """
 
 import asyncio
+import re
 from typing import AsyncGenerator, Optional
 from . import db
 from . import config
@@ -20,6 +21,33 @@ try:
     RAG_AVAILABLE = True
 except Exception:
     RAG_AVAILABLE = False
+
+
+_ROLE_TAG_RE = re.compile(r"\*\*\[(SYSTEM|USER|ASSISTANT)\]\*\*|\[(SYSTEM|USER|ASSISTANT)\]", re.IGNORECASE)
+
+
+def _enforce_socratic_question(reply: str) -> str:
+    """
+    Ensure Sage returns one clean question only.
+    - Removes leaked role tags and transcript artifacts.
+    - Prefers the first sentence that ends with '?'.
+    - Falls back to a safe probing question.
+    """
+    cleaned = _ROLE_TAG_RE.sub("", (reply or ""))
+    cleaned = cleaned.replace("Assistant:", "").replace("User:", "").replace("System instructions:", "")
+    cleaned = " ".join(cleaned.split())
+
+    if "CLEARED" in cleaned.upper():
+        return "CLEARED"
+
+    # Pick the first question-looking segment.
+    for part in re.split(r"(?<=[?.!])\s+", cleaned):
+        segment = part.strip()
+        if segment.endswith("?") and len(segment) > 8:
+            return segment
+
+    # If no explicit question appears, force a concise probing question.
+    return "Can you explain that in your own words, step by step?"
 
 
 def _build_system_prompt(concept: str, debt_entries: list) -> str:
@@ -92,12 +120,52 @@ async def run_sage_ollama(
         async for chunk in stream_chat(model=config.SAGE_MODEL, messages=messages):
             token = chunk.get("message", {}).get("content", "")
             full_reply += token
-            if token:
-                yield token
+
+        normalized = _enforce_socratic_question(full_reply)
+        if normalized == "CLEARED":
+            yield "CLEARED"
+            yield "\n__CLEARED__"
+            return
+
+        if normalized:
+            yield normalized
 
         # Signal clearing to the SSE wrapper
         if "CLEARED" in full_reply.upper():
             yield "\n__CLEARED__"
 
     except Exception as e:
-        yield f"\n[Sage error: {e}]"
+        err_str = str(e)
+        err_type = type(e).__name__
+
+        # Missing configuration
+        if "HF_SPACE_URL" in err_str:
+            yield (
+                "\n[Sage error: Inference backend is not configured. "
+                "Please set the HF_SPACE_URL environment variable on Render.]"
+            )
+        # HF Space cold-start / connection refused
+        elif (
+            "ConnectError" in err_type
+            or "connect" in err_str.lower()
+            or "Connection refused" in err_str
+            or "Could not get Gradio config" in err_str
+        ):
+            yield (
+                "\n[Sage error: Could not reach the Hugging Face inference Space. "
+                "The Space may be waking up from sleep — please wait 20–30 seconds and try again.]"
+            )
+        # Timeout during model loading or generation
+        elif "timeout" in err_str.lower() or "Timeout" in err_type or "ReadTimeout" in err_type:
+            yield (
+                "\n[Sage error: The inference request timed out. "
+                "Gemma 4 may still be loading on the GPU — please try again in a moment.]"
+            )
+        # HF Space returned an HTTP error (e.g. 503 while waking)
+        elif "HTTPStatusError" in err_type or "status code" in err_str.lower():
+            yield (
+                "\n[Sage error: The inference Space returned an error. "
+                "It may be overloaded or restarting — please try again shortly.]"
+            )
+        else:
+            yield f"\n[Sage error: {e}]"
