@@ -30,9 +30,11 @@ except ModuleNotFoundError:
     spaces = _SpacesStub()
 
 # ── llama-cpp backend ─────────────────────────────────────────────────────────
+_llama_import_error = None
 try:
     from llama_cpp import Llama
-except Exception:
+except Exception as exc:
+    _llama_import_error = exc
     Llama = None
 
 MODEL_REPO = os.getenv("GEMMA_2B_GGUF_REPO", "unsloth/gemma-2-2b-it-GGUF")
@@ -47,6 +49,7 @@ MODEL_FILE_CANDIDATES = [
 ]
 
 _llm = None
+_last_model_error = ""
 logger = logging.getLogger(__name__)
 
 
@@ -83,10 +86,11 @@ def _download_model_file() -> str:
 
 
 def load_model():
-    global _llm
+    global _llm, _last_model_error
     if _llm is None:
         if Llama is None:
-            logger.exception("llama-cpp-python import failed")
+            _last_model_error = f"llama-cpp import failed: {_llama_import_error}"
+            logger.error(_last_model_error)
             _llm = _FallbackModel()
             return _llm
 
@@ -98,8 +102,10 @@ def load_model():
                 n_threads=int(os.getenv("GEMMA_2B_THREADS", "4")),
                 n_gpu_layers=0,
             )
+            _last_model_error = ""
         except Exception:
             logger.exception("Gemma 2B GGUF initialization failed; falling back")
+            _last_model_error = "gguf initialization failed; check Space logs for traceback"
             _llm = _FallbackModel()
     return _llm
 
@@ -142,4 +148,5 @@ def health_check() -> dict:
         "backend": "llama-cpp",
         "model_repo": MODEL_REPO,
         "model_file": MODEL_FILE,
+        "model_error": _last_model_error or None,
     }
