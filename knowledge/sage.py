@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import re
 from typing import List, Dict, Any
 from . import config
 from .agents.inference_router import chat
@@ -7,6 +8,28 @@ from .agents.inference_router import chat
 class ClearingResult:
     cleared: bool
     response: str
+
+
+_ROLE_TAG_RE = re.compile(r"\*\*\[(SYSTEM|USER|ASSISTANT)\]\*\*|\[(SYSTEM|USER|ASSISTANT)\]", re.IGNORECASE)
+
+
+def _normalize_socratic_response(reply: str) -> str:
+    cleaned = _ROLE_TAG_RE.sub("", reply or "")
+    cleaned = cleaned.replace("Assistant:", "").replace("User:", "").replace("System instructions:", "")
+    cleaned = " ".join(cleaned.split())
+
+    if not cleaned:
+        return "Can you explain that in your own words, step by step?"
+
+    if "CLEARED" in cleaned.upper():
+        return "CLEARED"
+
+    for part in re.split(r"(?<=[?.!])\s+", cleaned):
+        segment = part.strip()
+        if segment.endswith("?") and len(segment) > 8:
+            return segment
+
+    return "Can you explain that in your own words, step by step?"
 
 def run_session(concept: str, debt_log: List[Dict[str, Any]], chat_history: List[Dict[str, str]]) -> ClearingResult:
     """
@@ -67,6 +90,8 @@ Context:
                     cleared = True
                     ai_response = "Great job! You've successfully demonstrated comprehension of this concept."
                     break
+
+        ai_response = _normalize_socratic_response(ai_response)
 
         return ClearingResult(cleared=cleared, response=ai_response)
         

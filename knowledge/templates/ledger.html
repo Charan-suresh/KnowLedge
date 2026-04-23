@@ -403,7 +403,9 @@
       const res = await fetch('/api/lens/verify', { method: 'POST', body: formData });
       const data = await res.json();
       
-      if(data.explanation && data.width > 0) {
+        if (data.handwritten && !data.has_issue) {
+          showToast('✅', 'Handwritten notes recognized', data.explanation || 'No visual logic failures detected.');
+        } else if(data.explanation && data.width > 0) {
           showToast('📌', 'Lens found an error', data.explanation);
       } else {
           showToast('✅', 'Lens verification', 'No visual logic failures detected.');

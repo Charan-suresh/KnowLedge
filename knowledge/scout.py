@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+from collections import Counter
+import re
 from typing import List
 from . import config
 from .agents.inference_router import chat
@@ -6,10 +8,119 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+_STOPWORDS = {
+    "a", "an", "and", "as", "at", "be", "been", "but", "by", "for", "from",
+    "has", "have", "i", "if", "in", "into", "is", "it", "its", "me", "my",
+    "of", "on", "or", "our", "so", "than", "that", "the", "their", "then",
+    "there", "these", "this", "those", "to", "was", "we", "were", "with", "you",
+    "your", "btw", "via", "do", "does", "did", "can", "could", "should", "would",
+}
+
 @dataclass
 class ConceptTag:
     concept_tag: str
     confidence_score: float
+
+
+def _title_case_concept(text: str) -> str:
+    parts = [part for part in re.split(r"\s+", text.strip()) if part]
+    return " ".join(part[:1].upper() + part[1:] for part in parts)
+
+
+def _fallback_concepts(text: str, limit: int = 3) -> List[ConceptTag]:
+    tokens = re.findall(r"[A-Za-z][A-Za-z0-9'-]+", text.lower())
+    if not tokens:
+        return []
+
+    meaningful = [token for token in tokens if token not in _STOPWORDS and len(token) > 2]
+    if not meaningful:
+        meaningful = tokens[:]
+
+    spans: List[str] = []
+    current: List[str] = []
+    for token in meaningful:
+        if token in _STOPWORDS:
+            if len(current) >= 1:
+                spans.append(" ".join(current))
+            current = []
+            continue
+        current.append(token)
+        if len(current) >= 3:
+            spans.append(" ".join(current))
+            current = []
+    if current:
+        spans.append(" ".join(current))
+
+    candidates: List[str] = []
+    seen = set()
+    for phrase in spans:
+        phrase = phrase.strip()
+        if not phrase:
+            continue
+        for candidate in (phrase, *phrase.split()):
+            normalized = candidate.strip().lower()
+            if normalized and normalized not in _STOPWORDS and normalized not in seen:
+                seen.add(normalized)
+                candidates.append(_title_case_concept(normalized))
+            if len(candidates) >= limit:
+                break
+        if len(candidates) >= limit:
+            break
+
+    if not candidates:
+        counts = Counter(token for token in meaningful if token not in _STOPWORDS)
+        candidates = [_title_case_concept(token) for token, _ in counts.most_common(limit)]
+
+    return [ConceptTag(concept_tag=candidate, confidence_score=0.35) for candidate in candidates[:limit]]
+
+
+def _extract_concepts_from_response(response: dict, text: str) -> List[ConceptTag]:
+    message = response.get("message", {}) or {}
+    extracted_concepts: List[ConceptTag] = []
+
+    tool_calls = message.get("tool_calls", []) or []
+    if tool_calls:
+        for tool in tool_calls:
+            function_call = tool.get("function", {})
+            if function_call.get("name") != "log_comprehension_concepts":
+                continue
+
+            arguments = function_call.get("arguments", {}) or {}
+            concepts = arguments.get("concepts", []) or []
+            for concept in concepts:
+                tag = concept.get("concept_tag")
+                score = concept.get("confidence_score")
+                if tag and score is not None:
+                    extracted_concepts.append(
+                        ConceptTag(concept_tag=str(tag).strip(), confidence_score=float(score))
+                    )
+
+    if extracted_concepts:
+        return extracted_concepts
+
+    content = str(message.get("content", "") or "").strip()
+    if content:
+        try:
+            payload = re.search(r"\{.*\}", content, flags=re.DOTALL)
+            if payload:
+                import json
+
+                parsed = json.loads(payload.group(0))
+                concepts = parsed.get("concepts", []) if isinstance(parsed, dict) else []
+                for concept in concepts:
+                    tag = concept.get("concept_tag")
+                    score = concept.get("confidence_score")
+                    if tag and score is not None:
+                        extracted_concepts.append(
+                            ConceptTag(concept_tag=str(tag).strip(), confidence_score=float(score))
+                        )
+        except Exception:
+            extracted_concepts = []
+
+    if extracted_concepts:
+        return extracted_concepts
+
+    return _fallback_concepts(text)
 
 def tag_content(text: str) -> List[ConceptTag]:
     """
@@ -66,26 +177,9 @@ def tag_content(text: str) -> List[ConceptTag]:
             ],
             tools=tools
         )
-        
-        message = response.get('message', {})
-        tool_calls = message.get('tool_calls', [])
-        
-        extracted_concepts = []
-        
-        if tool_calls:
-            for tool in tool_calls:
-                function_call = tool.get('function', {})
-                if function_call.get('name') == 'log_comprehension_concepts':
-                    arguments = function_call.get('arguments', {})
-                    concepts = arguments.get('concepts', [])
-                    for concept in concepts:
-                        tag = concept.get('concept_tag')
-                        score = concept.get('confidence_score')
-                        if tag and score is not None:
-                            extracted_concepts.append(ConceptTag(concept_tag=tag, confidence_score=float(score)))
-        
-        return extracted_concepts
+
+        return _extract_concepts_from_response(response, text)
 
     except Exception as e:
         logger.error(f"Error connecting to Sentinel model: {e}")
-        return []
+        return _fallback_concepts(text)

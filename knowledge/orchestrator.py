@@ -190,8 +190,9 @@ class Orchestrator:
         try:
             result = verify_image(image_bytes, concept)
             
-            # Keep prior behavior while persisting a verification signature for sync.
-            if result.explanation and "Unknown error" not in result.explanation:
+            # Persist handwritten verification only when the model actually recognized handwriting
+            # or found a concrete issue worth carrying into the ledger.
+            if (result.handwritten or result.has_issue) and result.explanation and "Unknown error" not in result.explanation:
                 db.update_status(concept, "persists")
                 signature = make_lens_signature(image_bytes, result.explanation)
                 db.set_debt_integrity(concept, integrity_suspect=False, clearing_method="lens_verified", lens_signature=signature)

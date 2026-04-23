@@ -596,7 +596,10 @@ async def trigger_lens(concept: str = Form(...), file: UploadFile = File(...)):
         return {
             "x": result.x, "y": result.y,
             "width": result.width, "height": result.height,
-            "explanation": result.explanation
+            "explanation": result.explanation,
+            "handwritten": result.handwritten,
+            "has_issue": result.has_issue,
+            "confidence": result.confidence,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
