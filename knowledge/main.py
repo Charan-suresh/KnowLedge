@@ -352,11 +352,23 @@ async def trigger_scout(req: ScoutRequest):
     # Process inline so UI refresh sees updates immediately.
     concepts = tag_content(req.text)
     inserted = 0
+    inserted_concepts: list[str] = []
+    seen = set()
     for concept in concepts:
-        db.insert_debt(concept.concept_tag, req.text, concept.confidence_score)
-        orchestrator.event_bus.put({"type": "DEBT_ADDED", "concept": concept.concept_tag})
+        concept_name = (concept.concept_tag or "").strip()
+        if not concept_name:
+            continue
+        key = concept_name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+
+        confidence = float(max(0.0, min(1.0, concept.confidence_score)))
+        db.insert_debt(concept_name, req.text, confidence)
+        orchestrator.event_bus.put({"type": "DEBT_ADDED", "concept": concept_name})
         inserted += 1
-    return {"status": "ok", "inserted": inserted}
+        inserted_concepts.append(concept_name)
+    return {"status": "ok", "inserted": inserted, "concepts": inserted_concepts}
 
 @app.post("/api/sage/turn")
 async def trigger_sage(req: SageRequest):

@@ -116,19 +116,34 @@ async def run_sage_ollama(
     messages = [{"role": "system", "content": system_prompt}] + chat_history
 
     full_reply = ""
+    emitted_question = False
     try:
         async for chunk in stream_chat(model=config.SAGE_MODEL, messages=messages):
             token = chunk.get("message", {}).get("content", "")
             full_reply += token
 
-        normalized = _enforce_socratic_question(full_reply)
-        if normalized == "CLEARED":
-            yield "CLEARED"
-            yield "\n__CLEARED__"
-            return
+            if emitted_question:
+                continue
 
-        if normalized:
-            yield normalized
+            # Emit early as soon as we can confidently form one focused question.
+            normalized = _enforce_socratic_question(full_reply)
+            if normalized == "CLEARED":
+                yield "CLEARED"
+                yield "\n__CLEARED__"
+                return
+
+            if normalized.endswith("?") and len(normalized) > 8:
+                yield normalized
+                emitted_question = True
+
+        if not emitted_question:
+            normalized = _enforce_socratic_question(full_reply)
+            if normalized == "CLEARED":
+                yield "CLEARED"
+                yield "\n__CLEARED__"
+                return
+            if normalized:
+                yield normalized
 
         # Signal clearing to the SSE wrapper
         if "CLEARED" in full_reply.upper():

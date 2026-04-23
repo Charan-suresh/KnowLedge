@@ -86,6 +86,13 @@ def _extract_concepts_from_response(response: dict, text: str) -> List[ConceptTa
                 continue
 
             arguments = function_call.get("arguments", {}) or {}
+            if isinstance(arguments, str):
+                try:
+                    import json
+
+                    arguments = json.loads(arguments)
+                except Exception:
+                    arguments = {}
             concepts = arguments.get("concepts", []) or []
             for concept in concepts:
                 tag = concept.get("concept_tag")
@@ -118,7 +125,19 @@ def _extract_concepts_from_response(response: dict, text: str) -> List[ConceptTa
             extracted_concepts = []
 
     if extracted_concepts:
-        return extracted_concepts
+        cleaned: List[ConceptTag] = []
+        seen = set()
+        for item in extracted_concepts:
+            tag = (item.concept_tag or "").strip()
+            if not tag:
+                continue
+            key = tag.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            cleaned.append(ConceptTag(concept_tag=tag, confidence_score=max(0.0, min(1.0, float(item.confidence_score)))))
+        if cleaned:
+            return cleaned
 
     return _fallback_concepts(text)
 

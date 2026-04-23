@@ -21,6 +21,28 @@ class SageScoutLensBehaviorTests(unittest.TestCase):
         self.assertGreaterEqual(len(concepts), 1)
         self.assertTrue(all(item.concept_tag for item in concepts))
 
+    def test_scout_parses_string_tool_arguments(self):
+        fake_response = {
+            "message": {
+                "content": "",
+                "tool_calls": [
+                    {
+                        "function": {
+                            "name": "log_comprehension_concepts",
+                            "arguments": '{"concepts": [{"concept_tag": "Recursion", "confidence_score": 0.92}]}'
+                        }
+                    }
+                ],
+            }
+        }
+
+        with patch("knowledge.scout.chat", return_value=fake_response):
+            concepts = tag_content("recursive functions call themselves")
+
+        self.assertEqual(len(concepts), 1)
+        self.assertEqual(concepts[0].concept_tag, "Recursion")
+        self.assertGreater(concepts[0].confidence_score, 0.9)
+
     def test_sage_normalizes_answer_into_single_question(self):
         fake_response = {
             "message": {
@@ -55,6 +77,26 @@ class SageScoutLensBehaviorTests(unittest.TestCase):
         self.assertFalse(result.has_issue)
         self.assertGreater(result.confidence, 0.9)
         self.assertIn("Handwritten notes recognized", result.explanation)
+
+    def test_lens_parses_fenced_json_payload(self):
+        fake_response = {
+            "message": {
+                "content": '```json\n{"x": 1, "y": 2, "width": 3, "height": 4, "explanation": "handwritten work", "handwritten": "true", "has_issue": "false", "confidence": 0.88}\n```',
+                "audio": None,
+            }
+        }
+
+        image_bytes = b"fake-image-bytes"
+        with patch("knowledge.lens.Image.open") as mock_open, patch("knowledge.lens.chat", return_value=fake_response):
+            mock_image = mock_open.return_value
+            mock_image.width = 640
+            mock_image.height = 480
+            result = verify_image(image_bytes, "photosynthesis")
+
+        self.assertTrue(result.handwritten)
+        self.assertFalse(result.has_issue)
+        self.assertEqual(result.width, 3)
+        self.assertGreater(result.confidence, 0.8)
 
 
 if __name__ == "__main__":

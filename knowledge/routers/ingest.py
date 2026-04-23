@@ -54,12 +54,24 @@ async def ingest_content(req: IngestRequest, background_tasks: BackgroundTasks):
         logger.error(f"Scout failed: {e}")
         tags = []
 
-    concepts = [t.concept_tag for t in tags]
-    debt_found = len(concepts) > 0
+    normalized_tags = []
+    seen = set()
+    for tag in tags:
+        name = (tag.concept_tag or "").strip()
+        if not name:
+            continue
+        key = name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        normalized_tags.append((name, float(max(0.0, min(1.0, tag.confidence_score)))))
+
+    concepts = [name for name, _ in normalized_tags]
+    debt_found = len(normalized_tags) > 0
 
     # 2. Persist to debt_log
-    for tag in tags:
-        db.insert_debt(tag.concept_tag, req.content, tag.confidence_score)
+    for concept_name, confidence in normalized_tags:
+        db.insert_debt(concept_name, req.content, confidence)
 
     # 3. Create Classroom session record
     session_id = str(uuid.uuid4())

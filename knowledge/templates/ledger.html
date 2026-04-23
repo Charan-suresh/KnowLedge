@@ -371,19 +371,25 @@
     window.startColdStartTimer('{{ inference_backend }}');
     
     try {
-      await fetch('/api/scout', {
+      const res = await fetch('/api/scout', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({text: val})
       });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || 'Failed to tag concepts.');
+      }
       window.stopColdStartTimer();
-      setTimeout(() => {
-        showToast('✅', 'Analysis complete', 'Refresh your dashboard in a moment.');
-        fetchState();
-      }, 5000); 
+      await fetchState();
+      if ((data.inserted || 0) > 0) {
+        showToast('✅', 'Analysis complete', `${data.inserted} concept${data.inserted === 1 ? '' : 's'} added to ledger.`);
+      } else {
+        showToast('⚠️', 'No concepts detected', 'Try pasting a larger explanation or code block.');
+      }
     } catch(e) {
       window.stopColdStartTimer();
-      showToast('❌', 'Error', 'Failed to tag concepts.');
+      showToast('❌', 'Error', e?.message || 'Failed to tag concepts.');
     }
   }
 
