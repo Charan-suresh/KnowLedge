@@ -66,7 +66,7 @@
     <header class="topbar">
       <div class="top-left">
         <h1 id="page-title">{% block topbar_title %}Your Learning Ledger{% endblock %}</h1>
-        <p id="page-sub">{% block topbar_sub %}Today · Data Structures & Algorithms{% endblock %}</p>
+        <p id="page-sub">{% block topbar_sub %}Today · Learning Ledger{% endblock %}</p>
       </div>
       <div class="top-right">
         {% block topbar_actions %}
@@ -112,6 +112,70 @@
       <div class="modal-footer">
         <div>Session powered by Sage · Gemma 4 E4B · offline</div>
         <div class="success-label" id="modalSuccess">✓ Concept owned!</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Solo Assessment Modal -->
+  <div class="modal-backdrop solo-assessment-backdrop" id="soloAssessmentModal" onclick="closeSoloAssessmentModal(event)">
+    <div class="modal-card solo-modal-card" onclick="event.stopPropagation()">
+      <div class="modal-header solo-modal-header">
+        <div class="sage-avatar solo-avatar">🎯</div>
+        <div class="modal-titles">
+          <h2>Solo Assessment</h2>
+          <p id="soloModalSubtitle">One concept, one clean answer</p>
+        </div>
+        <div class="close-btn" onclick="closeSoloAssessmentModal()">✕</div>
+      </div>
+
+      <div class="solo-assessment-shell">
+        <div class="solo-assessment-hero">
+          <div class="solo-assessment-copy">
+            <div class="solo-kicker">🧘 Focus Mode</div>
+            <h3>Explain the concept without hints</h3>
+            <p>Solo Assessment checks whether you can restate the idea from memory. No AI assistance, no distractions, just your understanding.</p>
+          </div>
+          <div class="solo-assessment-badge-wrap">
+            <span class="solo-chip">Scout paused</span>
+            <span class="solo-chip muted">Sage only</span>
+          </div>
+        </div>
+
+        <div class="solo-form-grid">
+          <div class="solo-field-group">
+            <label for="soloConceptInput">Concept</label>
+            <input id="soloConceptInput" class="modal-input solo-input" type="text" placeholder="e.g., chemical bonding">
+          </div>
+          <div class="solo-field-group">
+            <label for="soloAssessmentStatus">Status</label>
+            <input id="soloAssessmentStatus" class="modal-input solo-input" type="text" readonly value="Ready to start">
+          </div>
+        </div>
+
+        <div class="solo-question-card" id="soloQuestionCard">
+          <div class="solo-question-label">Prompt</div>
+          <div class="solo-question-text" id="soloQuestionText">Start an assessment to generate the question.</div>
+        </div>
+
+        <div class="solo-answer-group">
+          <label for="soloAnswerInput">Your answer</label>
+          <textarea id="soloAnswerInput" class="modal-input solo-answer" placeholder="Write a full explanation in your own words..."></textarea>
+        </div>
+
+        <div class="solo-result-card" id="soloResultCard">
+          <div class="solo-result-label" id="soloResultLabel">Assessment result</div>
+          <div class="solo-result-text" id="soloResultText">Answer the question to see your score.</div>
+        </div>
+      </div>
+
+      <div class="modal-footer solo-modal-footer">
+        <div id="soloModalFooterText">Pick a concept to begin.</div>
+        <div class="solo-modal-actions">
+          <button class="btn-ghost" type="button" onclick="closeSoloAssessmentModal()">Close</button>
+          <button class="btn-ghost" type="button" id="soloRetryBtn" onclick="resetSoloAssessment()" style="display:none;">Try another concept</button>
+          <button class="btn-primary" type="button" id="soloStartBtn" onclick="submitSoloAssessmentConcept()">Start assessment</button>
+          <button class="btn-primary" type="button" id="soloSubmitBtn" onclick="submitSoloAssessmentAnswer()" style="display:none;">Submit answer</button>
+        </div>
       </div>
     </div>
   </div>
@@ -186,7 +250,7 @@
           <div style="display:flex;gap:8px;align-items:center;">
             <button onclick="startSoloAssessment()" style="background:#fff;color:var(--ink);border:none;
               padding:4px 14px;border-radius:6px;cursor:pointer;font-family:inherit;font-size:11px;">
-              Start Assessment
+              Open Assessment
             </button>
             <button onclick="toggleSoloMode()" style="background:var(--amber);color:var(--ink);border:none;
               padding:4px 14px;border-radius:6px;cursor:pointer;font-family:inherit;font-size:11px;">
@@ -233,49 +297,189 @@
 
     function openSoloMode() { toggleSoloMode(); }
 
-    async function startSoloAssessment() {
-      try {
-        if (!soloModeActive) applySoloMode(true);
-        const concept = (window.prompt('Enter the concept to assess in Solo Mode:') || '').trim();
-        if (!concept) {
-          showToast('⚠️', 'Missing concept', 'Please enter a concept first.');
-          return;
-        }
+    let soloAssessmentState = {
+      open: false,
+      concept: '',
+      sessionId: '',
+      question: '',
+      busy: false,
+      passed: false,
+    };
 
+    function setSoloAssessmentStatus(text) {
+      const status = document.getElementById('soloAssessmentStatus');
+      if (status) status.value = text;
+    }
+
+    function setSoloAssessmentPhase(phase) {
+      const questionCard = document.getElementById('soloQuestionCard');
+      const answerInput = document.getElementById('soloAnswerInput');
+      const resultCard = document.getElementById('soloResultCard');
+      const startBtn = document.getElementById('soloStartBtn');
+      const submitBtn = document.getElementById('soloSubmitBtn');
+      const retryBtn = document.getElementById('soloRetryBtn');
+      const footerText = document.getElementById('soloModalFooterText');
+
+      if (questionCard) questionCard.style.display = phase === 'question' || phase === 'answer' || phase === 'result' ? 'block' : 'none';
+      if (answerInput) answerInput.style.display = phase === 'answer' || phase === 'result' ? 'block' : 'none';
+      if (resultCard) resultCard.style.display = phase === 'result' ? 'block' : 'none';
+      if (startBtn) startBtn.style.display = phase === 'setup' ? 'inline-flex' : 'none';
+      if (submitBtn) submitBtn.style.display = phase === 'answer' ? 'inline-flex' : 'none';
+      if (retryBtn) retryBtn.style.display = phase === 'result' ? 'inline-flex' : 'none';
+
+      if (footerText) {
+        footerText.textContent =
+          phase === 'setup' ? 'Choose a concept and generate a single assessment question.' :
+          phase === 'question' ? 'Read the question carefully, then explain the concept in your own words.' :
+          phase === 'answer' ? 'Write a full response before submitting.' :
+          'Review the result or start another concept.';
+      }
+    }
+
+    function openSoloAssessmentModal(prefillConcept = '') {
+      const modal = document.getElementById('soloAssessmentModal');
+      if (!modal) return;
+      if (!soloModeActive) applySoloMode(true);
+      soloAssessmentState.open = true;
+      modal.classList.add('open');
+
+      const conceptInput = document.getElementById('soloConceptInput');
+      const answerInput = document.getElementById('soloAnswerInput');
+      const questionText = document.getElementById('soloQuestionText');
+      const resultLabel = document.getElementById('soloResultLabel');
+      const resultText = document.getElementById('soloResultText');
+
+      if (conceptInput) conceptInput.value = prefillConcept || soloAssessmentState.concept || '';
+      if (answerInput) answerInput.value = '';
+      if (questionText) questionText.textContent = 'Start an assessment to generate the question.';
+      if (resultLabel) resultLabel.textContent = 'Assessment result';
+      if (resultText) resultText.textContent = 'Answer the question to see your score.';
+
+      soloAssessmentState.question = '';
+      soloAssessmentState.sessionId = '';
+      soloAssessmentState.passed = false;
+      setSoloAssessmentStatus('Ready to start');
+      setSoloAssessmentPhase('setup');
+      setTimeout(() => conceptInput && conceptInput.focus(), 120);
+    }
+
+    function closeSoloAssessmentModal(event) {
+      if (event && event.target !== document.getElementById('soloAssessmentModal')) return;
+      const modal = document.getElementById('soloAssessmentModal');
+      if (modal) modal.classList.remove('open');
+      soloAssessmentState.open = false;
+    }
+
+    function resetSoloAssessment() {
+      soloAssessmentState = {
+        open: true,
+        concept: '',
+        sessionId: '',
+        question: '',
+        busy: false,
+        passed: false,
+      };
+      openSoloAssessmentModal('');
+    }
+
+    async function startSoloAssessment() {
+      openSoloAssessmentModal(soloAssessmentState.concept || '');
+    }
+
+    async function submitSoloAssessmentConcept() {
+      if (soloAssessmentState.busy) return;
+      const conceptInput = document.getElementById('soloConceptInput');
+      const concept = (conceptInput?.value || '').trim();
+      if (!concept) {
+        showToast('⚠️', 'Missing concept', 'Please enter a concept first.');
+        return;
+      }
+
+      soloAssessmentState.busy = true;
+      setSoloAssessmentStatus('Generating question...');
+      try {
         const startRes = await fetch('/api/sage/start-solo', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({concept})
+          body: JSON.stringify({ concept })
         });
         if (!startRes.ok) throw new Error('Unable to start solo session.');
         const startData = await startRes.json();
 
-        const answer = (window.prompt(`Solo Question:\n\n${startData.question}\n\nType your answer:`) || '').trim();
-        if (!answer) {
-          showToast('⚠️', 'No response submitted', 'Solo assessment canceled.');
-          return;
-        }
+        soloAssessmentState.concept = concept;
+        soloAssessmentState.sessionId = startData.session_id;
+        soloAssessmentState.question = startData.question;
+        setSoloAssessmentStatus('Question ready');
 
+        const questionText = document.getElementById('soloQuestionText');
+        const resultText = document.getElementById('soloResultText');
+        const answerInput = document.getElementById('soloAnswerInput');
+        if (questionText) questionText.textContent = startData.question;
+        if (resultText) resultText.textContent = 'Explain the concept in your own words. Then submit your answer.';
+        if (answerInput) answerInput.value = '';
+
+        setSoloAssessmentPhase('answer');
+        if (answerInput) answerInput.focus();
+      } catch (e) {
+        showToast('❌', 'Solo Mode error', e?.message || 'Could not start assessment.');
+        setSoloAssessmentStatus('Unable to start');
+      } finally {
+        soloAssessmentState.busy = false;
+      }
+    }
+
+    async function submitSoloAssessmentAnswer() {
+      if (soloAssessmentState.busy) return;
+      const answerInput = document.getElementById('soloAnswerInput');
+      const answer = (answerInput?.value || '').trim();
+      if (!answer) {
+        showToast('⚠️', 'No response submitted', 'Write your answer before submitting.');
+        return;
+      }
+
+      if (!soloAssessmentState.sessionId || !soloAssessmentState.concept) {
+        showToast('⚠️', 'Session missing', 'Start the assessment again.');
+        setSoloAssessmentPhase('setup');
+        return;
+      }
+
+      soloAssessmentState.busy = true;
+      setSoloAssessmentStatus('Evaluating answer...');
+      try {
         const evalRes = await fetch('/api/sage/solo-evaluate', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({
-            concept,
-            session_id: startData.session_id,
+            concept: soloAssessmentState.concept,
+            session_id: soloAssessmentState.sessionId,
             response: answer,
           })
         });
         if (!evalRes.ok) throw new Error('Unable to evaluate response.');
         const result = await evalRes.json();
         const score = result?.evaluation?.score ?? 0;
+        const resultLabel = document.getElementById('soloResultLabel');
+        const resultText = document.getElementById('soloResultText');
+        if (resultLabel) resultLabel.textContent = result.passed ? 'Assessment passed' : 'Assessment incomplete';
+        if (resultText) resultText.textContent = result.passed
+          ? `Score: ${score}. Concept is now clear.`
+          : `Score: ${score}. Review the gaps and try again.`;
+        setSoloAssessmentStatus(result.passed ? 'Cleared' : 'Needs another pass');
+        setSoloAssessmentPhase('result');
+        soloAssessmentState.passed = Boolean(result.passed);
+
         if (result.passed) {
           showToast('✅', 'Solo assessment passed', `Score: ${score}. Concept is now clear.`);
+          if (typeof fetchState === 'function') fetchState();
+          setTimeout(() => closeSoloAssessmentModal(), 1800);
         } else {
           showToast('⚠️', 'Solo assessment incomplete', `Score: ${score}. Review gaps and retry.`);
         }
-        if (typeof fetchState === 'function') fetchState();
       } catch (e) {
         showToast('❌', 'Solo Mode error', e?.message || 'Could not complete solo assessment.');
+        setSoloAssessmentStatus('Evaluation failed');
+      } finally {
+        soloAssessmentState.busy = false;
       }
     }
 
