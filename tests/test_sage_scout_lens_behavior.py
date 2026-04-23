@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from knowledge.sage import run_session
+from knowledge.sage_stream import _enforce_socratic_question
 from knowledge.scout import tag_content
 from knowledge.lens import verify_image
 
@@ -57,6 +58,35 @@ class SageScoutLensBehaviorTests(unittest.TestCase):
         self.assertFalse(result.cleared)
         self.assertTrue(result.response.endswith("?"))
         self.assertNotIn("Assistant:", result.response)
+
+    def test_sage_strips_explanation_preamble_to_extract_socratic_question(self):
+        """Verify that Sage can extract a real Socratic question from explanation preambles."""
+        explanation_response = (
+            "Atoms bond because they want to become more stable. "
+            "They do this by either sharing or transferring electrons. "
+            "Can you tell me what happens when electrons are transferred?"
+        )
+        
+        result = _enforce_socratic_question(explanation_response)
+        
+        # Should extract the real Socratic question, not a generic fallback
+        self.assertIn("transferred", result.lower())
+        self.assertTrue(result.endswith("?"))
+        self.assertGreater(len(result), 8)
+
+    def test_sage_avoids_non_socratic_restatement_questions(self):
+        """Verify that generic 'explain that' questions are avoided in favor of real Socratic ones."""
+        response_with_restatement = (
+            "Chemical bonding involves atoms sharing electrons to form stable molecules. "
+            "Can you explain that in your own words, step by step?"
+        )
+        
+        result = _enforce_socratic_question(response_with_restatement)
+        
+        # Should not return the generic restatement request
+        self.assertNotIn("explain that", result.lower())
+        # Should fall back to a proper Socratic question if no better option exists
+        self.assertTrue(result.endswith("?"))
 
     def test_lens_marks_handwritten_notes_in_response(self):
         fake_response = {

@@ -28,8 +28,9 @@ _ROLE_TAG_RE = re.compile(r"\*\*\[(SYSTEM|USER|ASSISTANT)\]\*\*|\[(SYSTEM|USER|A
 
 def _enforce_socratic_question(reply: str) -> str:
     """
-    Ensure Sage returns one clean question only.
+    Ensure Sage returns one clean Socratic question only.
     - Removes leaked role tags and transcript artifacts.
+    - Strips explanation preambles ("Atoms bond because...") to find the actual question.
     - Prefers the first sentence that ends with '?'.
     - Falls back to a safe probing question.
     """
@@ -40,14 +41,46 @@ def _enforce_socratic_question(reply: str) -> str:
     if "CLEARED" in cleaned.upper():
         return "CLEARED"
 
-    # Pick the first question-looking segment.
-    for part in re.split(r"(?<=[?.!])\s+", cleaned):
+    # Split into sentences and find questions that look Socratic (not restatement requests).
+    sentences = re.split(r"(?<=[?.!])\s+", cleaned)
+    
+    # Scan through sentences looking for legitimate Socratic questions.
+    # Prefer questions that ask about understanding, definitions, implications, etc.
+    # Skip generic restatement requests like "Can you explain that in your own words?"
+    socratic_keywords = {
+        "what", "why", "how", "which", "where", "when", "could", 
+        "would", "should", "difference", "example", "means", "describe",
+        "think", "consider", "tell", "show", "compare"
+    }
+    
+    # Phrases that indicate non-Socratic restatement questions.
+    avoid_phrases = {"explain that", "restate", "rephrase", "say that", "put that", "describe that"}
+    
+    for part in sentences:
         segment = part.strip()
-        if segment.endswith("?") and len(segment) > 8:
+        if not (segment.endswith("?") and len(segment) > 8):
+            continue
+        
+        lower = segment.lower()
+        # Skip restatement requests.
+        if any(phrase in lower for phrase in avoid_phrases):
+            continue
+        
+        # Prefer questions with Socratic keywords.
+        if any(keyword in lower for keyword in socratic_keywords):
+            return segment
+    
+    # If no Socratic-looking question found, check remaining questions but skip restatement ones.
+    for part in sentences:
+        segment = part.strip()
+        if not (segment.endswith("?") and len(segment) > 8):
+            continue
+        lower = segment.lower()
+        if not any(phrase in lower for phrase in avoid_phrases):
             return segment
 
-    # If no explicit question appears, force a concise probing question.
-    return "Can you explain that in your own words, step by step?"
+    # Final fallback: a genuine Socratic question.
+    return "What do you know about this concept? Can you give me an example?"
 
 
 def _build_system_prompt(concept: str, debt_entries: list) -> str:

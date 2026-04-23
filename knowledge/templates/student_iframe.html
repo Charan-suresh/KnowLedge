@@ -317,7 +317,7 @@
   function startSageSession(concept) {
     // Ask Sage first question via SSE stream
     chatHistory = [];
-    streamSageReply(`Let's clear "${concept}". Start by explaining it to me as simply as you can.`, true);
+    streamSageReply(`Let's work on "${concept}". I'll ask questions to check your understanding.`, true);
   }
 
   function streamSageReply(userMessage, isOpening = false) {

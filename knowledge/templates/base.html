@@ -495,7 +495,7 @@
       currentChatHistory = [];
       document.getElementById('modalConceptName').innerText = concept;
       const body = document.getElementById('modalBody');
-      body.innerHTML = `<div class="bubble sage" id="sageQuestion">Let's talk about ${concept}. Explain it to me.</div>`;
+      body.innerHTML = `<div class="bubble sage" id="sageQuestion">Let's work on "${concept}". I'll ask questions to check your understanding.</div>`;
       document.getElementById('modalInput').value = '';
       document.getElementById('modalSuccess').classList.remove('visible');
       document.getElementById('sageModal').classList.add('open');
