@@ -1297,7 +1297,6 @@ def test_full_workflow():
 - [ ] Peer learning groups (collaborative clearing)
 
 ### Phase 3 (Envisioned)
-- [ ] Mobile app (React Native)
 - [ ] Advanced NLP intent detection
 - [ ] Psychometric scoring (true learning debt FICO score)
 - [ ] LMS integrations (Canvas, Blackboard)

@@ -34,18 +34,42 @@ def _base_url() -> str:
 async def _request(method: str, path: str, json: dict | None = None, timeout: float = 30.0) -> httpx.Response:
     url = f"{_base_url()}{path}"
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
             response = await client.request(method, url, json=json)
-            response.raise_for_status()
+            _raise_for_status_with_context(response)
             return response
     except httpx.ConnectError as exc:
         if "certificate verify failed" not in str(exc).lower():
             raise
 
-    async with httpx.AsyncClient(timeout=timeout, verify=False) as client:
+    # Retry without TLS verification when the HF Space certificate causes issues.
+    async with httpx.AsyncClient(timeout=timeout, verify=False, follow_redirects=True) as client:
         response = await client.request(method, url, json=json)
-        response.raise_for_status()
+        _raise_for_status_with_context(response)
         return response
+
+
+def _raise_for_status_with_context(response: httpx.Response) -> None:
+    """
+    Raise a descriptive error for non-2xx responses.
+
+    HF Spaces that are sleeping return 503 with an HTML wake-up page.
+    We detect this and raise a more actionable error than the raw HTTP error.
+    """
+    if response.is_success:
+        return
+
+    status = response.status_code
+    content_type = response.headers.get("content-type", "")
+
+    # HF Space is waking up (sleeping free-tier space)
+    if status in (503, 502) or (status == 200 and "text/html" in content_type):
+        raise RuntimeError(
+            f"HF Space is unavailable (HTTP {status}). "
+            "The Space may be waking from sleep — please retry in 20–30 seconds."
+        )
+
+    response.raise_for_status()
 
 
 def _describe_exception(exc: Exception) -> str:
@@ -61,11 +85,18 @@ async def generate(model: str, prompt: str, max_tokens: int = 512) -> dict:
         "max_tokens": max_tokens,
     }
 
-    response = await _request("POST", "/api/generate", json=payload, timeout=180.0)
-    result = response.json()
+    response = await _request("POST", "/api/generate", json=payload, timeout=240.0)
+
+    try:
+        result = response.json()
+    except Exception:
+        raise RuntimeError(
+            f"HF Space returned non-JSON response (status {response.status_code}). "
+            "The Space may be waking from sleep — please retry in 20–30 seconds."
+        )
 
     if result.get("error"):
-        raise RuntimeError(f"HF Space error: {result['error']}")
+        raise RuntimeError(f"HF Space inference error: {result['error']}")
     return {"response": result.get("response", "")}
 
 
@@ -78,8 +109,15 @@ async def generate_with_image(
         "max_tokens": max_tokens,
     }
 
-    response = await _request("POST", "/api/generate_vision", json=payload, timeout=180.0)
-    result = response.json()
+    response = await _request("POST", "/api/generate_vision", json=payload, timeout=240.0)
+
+    try:
+        result = response.json()
+    except Exception:
+        raise RuntimeError(
+            f"HF Space returned non-JSON response for vision (status {response.status_code}). "
+            "The Space may be waking from sleep — please retry in 20–30 seconds."
+        )
 
     if result.get("error"):
         raise RuntimeError(f"HF Space vision error: {result['error']}")

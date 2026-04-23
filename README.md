@@ -105,7 +105,7 @@ Additional Gemma 4 capabilities used:
 | **Impact** | 30% | Addresses 1.5B+ learners across connected and disconnected regions. Works on ₹30,000 laptops with intermittent power. Introduces a new measurable metric — comprehension debt — that does not exist in any current EdTech product. |
 | **Innovation** | 30% | No existing tool tracks the per-concept delta between AI-assisted and unassisted understanding over time. KnowLedge creates an entirely new measurement category in education. |
 | **Technical Execution** | 25% | Multi-tier Gemma 4 (E2B background tagging under 1.5 GB RAM, E4B contradiction detection, vision trace analysis, native audio output), local RAG, SQLite, native function calling, and a 5-layer anti-gaming system — the complete capability stack, each feature serving a specific pedagogical purpose. |
-| **Accessibility** | 15% | Fully offline on consumer hardware. Student data architecturally incapable of leaving the device. 140+ languages natively. Runs on 8 GB RAM minimum. Deployed on mobile via React Native + Expo with on-device Gemma 4 via ML Kit GenAI Prompt API. |
+| **Accessibility** | 15% | Fully offline on consumer hardware. Student data architecturally incapable of leaving the device. 140+ languages natively. Runs on 8 GB RAM minimum. |
 
 ## Architecture
 
@@ -226,22 +226,6 @@ python scripts/verify_deployment.py https://your-app.onrender.com
 
 Full deployment guide: [cloud-run/README.md](cloud-run/README.md)
 
-## Mobile
-
-React Native + Expo companion app in `knowledge-mobile/`. Supports three inference modes:
-
-- `on_device_full` — Gemma 4 E2B + E4B both on-device via ML Kit GenAI Prompt API (Android, Pixel 7+, Samsung Galaxy S-series)
-- `on_device_scout` — Scout on-device, Sage/Lens via university server
-- `server_only` — thin client, all inference via server
-
-iPhone 16 Pro Max: E4B confirmed at 30 tokens/second via Google AI Edge Gallery. Full Sage sessions work in airplane mode.
-
-```bash
-cd knowledge-mobile
-npm install
-npx expo start
-```
-
 ## Repository structure
 
 ```
@@ -253,7 +237,6 @@ KnowLedge/
 │   ├── routers/            # ledger, progress, reports, solo, events
 │   ├── templates/          # Jinja2 HTML templates
 │   └── static/             # CSS, fonts
-├── knowledge-mobile/       # React Native + Expo app
 ├── cloud-run/              # Google Cloud Run deployment scripts
 ├── scripts/                # Real data collection, verify deployment
 ├── tests/                  # Privacy, integrity, and sync tests
@@ -291,7 +274,6 @@ KnowLedge/
 - Offline-first design using local SQLite, Ollama, and ChromaDB.
 - Privacy-preserving instructor sync that shares only concept-level summaries.
 - Integrity checks that combine session fingerprints, anti-spoof signals, and multimodal verification.
-- A separate Expo mobile companion app with the same product model.
 
 ## Product Overview
 
@@ -306,7 +288,6 @@ There is also a weekly instructor sync path that exports only anonymous, aggrega
 ## Repository Structure
 
 - `knowledge/` - FastAPI backend, orchestration, sync, integrity, RAG, and templates.
-- `knowledge-mobile/` - Expo + React Native companion app.
 - `cdt_vectorstore/` - Local ChromaDB persistence for curriculum context.
 - `knowledge_dashboard.html` - Standalone dashboard prototype.
 - `requirements.txt` - Python dependencies for the backend.
@@ -408,31 +389,6 @@ python -m knowledge.vectorize path/to/course_material.pdf
 
 This creates local retrieval context for Sage responses.
 
-## Mobile Companion
-
-The mobile app lives in `knowledge-mobile/` and is separate from the backend.
-
-```bash
-cd knowledge-mobile
-npm install
-npx expo start
-```
-
-If you want a device build:
-
-```bash
-npm run android
-npm run ios
-```
-
-The mobile app supports three runtime modes:
-
-- `on_device_full`
-- `on_device_scout`
-- `server_only`
-
-The native Gemma bridge is scaffolded for future Android and iOS implementation.
-
 ## Live Demo For Kaggle
 
 The best judge-facing option is a Hugging Face Space running the Streamlit demo in `app.py`.
@@ -468,7 +424,6 @@ Important values include:
 - `CHROMA_PATH`
 - `SYNC_ON_WIFI_ONLY`
 
-The Expo app has its own config in `knowledge-mobile/app.config.js` and `knowledge-mobile/app.json`.
 
 ## Testing
 
@@ -484,5 +439,4 @@ There are also lightweight smoke scripts in the repository root for quick local 
 
 - The project is intentionally offline-first.
 - Sync only shares aggregate concept data.
-- The mobile native inference layer is scaffolded, not fully implemented.
-- The main app is in the `knowledge/` package; the mobile app is an independent companion workspace.
+- The main app is in the `knowledge/` package.

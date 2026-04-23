@@ -17,6 +17,10 @@ class HfClientTests(unittest.IsolatedAsyncioTestCase):
         called_urls = []
 
         class FakeResponse:
+            is_success = True
+            status_code = 200
+            headers = {}
+
             def raise_for_status(self):
                 return None
 
@@ -76,6 +80,10 @@ class HfClientTests(unittest.IsolatedAsyncioTestCase):
         calls = []
 
         class FakeResponse:
+            is_success = True
+            status_code = 200
+            headers = {}
+
             def raise_for_status(self):
                 return None
 

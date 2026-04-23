@@ -1,9 +1,0 @@
-{
-  "platforms": ["android", "ios"],
-  "android": {
-    "modules": ["GemmaInferenceModule"]
-  },
-  "ios": {
-    "modules": ["GemmaInferenceModule"]
-  }
-}

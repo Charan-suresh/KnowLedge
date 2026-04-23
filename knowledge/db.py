@@ -1,5 +1,6 @@
 import sqlite3
 import json
+from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from . import config
 
@@ -183,6 +184,76 @@ def run_migrations() -> None:
                 question TEXT,
                 response TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id TEXT NOT NULL,
+                started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                concept_being_studied TEXT NOT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS concept_scores (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER NOT NULL,
+                concept TEXT NOT NULL,
+                direct_answer_score REAL DEFAULT 0.0,
+                temporal_score REAL DEFAULT 0.0,
+                probe_depth_score REAL DEFAULT 0.0,
+                trap_score REAL DEFAULT 0.0,
+                true_comprehension REAL DEFAULT 0.0,
+                status TEXT DEFAULT 'unverified',
+                verification_signal REAL DEFAULT 0.0,
+                FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+                UNIQUE(session_id, concept)
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_type TEXT NOT NULL,
+                session_id TEXT,
+                student_id TEXT,
+                concept TEXT,
+                inputs_json TEXT,
+                decision_json TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS probe_registry (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                concept TEXT NOT NULL,
+                strategy TEXT NOT NULL,
+                probe_text TEXT NOT NULL,
+                is_wrong_trap BOOL DEFAULT FALSE,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                resolved BOOL DEFAULT FALSE,
+                student_corrected BOOL
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS socratic_interrupts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                concept TEXT NOT NULL,
+                student_excerpt TEXT,
+                probe_text TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                resolved BOOL DEFAULT FALSE,
+                resolved_at TEXT,
+                penalized BOOL DEFAULT FALSE
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS session_aliases (
+                client_session_id TEXT PRIMARY KEY,
+                db_session_id INTEGER NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (db_session_id) REFERENCES sessions(id) ON DELETE CASCADE
             )
         """)
 
@@ -447,6 +518,406 @@ def save_real_performance(session_id: str, concept: str, mode: str, score: int, 
             (session_id, concept, mode, score, reasoning, json.dumps(specific_gaps), question, response),
         )
         return cursor.lastrowid
+
+
+def create_learning_session(student_id: str, concept_being_studied: str) -> int:
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO sessions (student_id, started_at, concept_being_studied)
+            VALUES (?, CURRENT_TIMESTAMP, ?)
+            """,
+            (student_id, concept_being_studied),
+        )
+        return int(cursor.lastrowid)
+
+
+def get_or_create_learning_session(student_id: str, concept_being_studied: str) -> int:
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT id FROM sessions
+            WHERE student_id = ? AND concept_being_studied = ?
+            ORDER BY id DESC LIMIT 1
+            """,
+            (student_id, concept_being_studied),
+        ).fetchone()
+        if row and row.get("id") is not None:
+            return int(row["id"])
+    return create_learning_session(student_id, concept_being_studied)
+
+
+def set_session_alias(client_session_id: str, db_session_id: int) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO session_aliases (client_session_id, db_session_id)
+            VALUES (?, ?)
+            ON CONFLICT(client_session_id) DO UPDATE SET db_session_id = excluded.db_session_id
+            """,
+            (client_session_id, db_session_id),
+        )
+
+
+def get_db_session_id_from_alias(client_session_id: str) -> Optional[int]:
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT db_session_id FROM session_aliases WHERE client_session_id = ?",
+            (client_session_id,),
+        ).fetchone()
+    if not row:
+        return None
+    return int(row.get("db_session_id"))
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def get_concept_score(session_id: int, concept: str) -> Optional[Dict[str, Any]]:
+    with get_connection() as conn:
+        return conn.execute(
+            "SELECT * FROM concept_scores WHERE session_id = ? AND concept = ?",
+            (session_id, concept),
+        ).fetchone()
+
+
+def upsert_concept_score(
+    session_id: int,
+    concept: str,
+    direct_answer_score: float,
+    temporal_score: float,
+    probe_depth_score: float,
+    trap_score: float,
+    true_comprehension: float,
+    status: str,
+    verification_signal: float = 0.0,
+) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO concept_scores
+                (session_id, concept, direct_answer_score, temporal_score, probe_depth_score,
+                 trap_score, true_comprehension, status, verification_signal)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(session_id, concept) DO UPDATE SET
+                direct_answer_score = excluded.direct_answer_score,
+                temporal_score = excluded.temporal_score,
+                probe_depth_score = excluded.probe_depth_score,
+                trap_score = excluded.trap_score,
+                true_comprehension = excluded.true_comprehension,
+                status = excluded.status,
+                verification_signal = excluded.verification_signal
+            """,
+            (
+                session_id,
+                concept,
+                direct_answer_score,
+                temporal_score,
+                probe_depth_score,
+                trap_score,
+                true_comprehension,
+                status,
+                verification_signal,
+            ),
+        )
+
+
+def update_comprehension_score(session_id: int, concept: str, new_signal: Dict[str, Any]) -> Dict[str, Any]:
+    from .anti_gaming import compute_true_comprehension, derive_comprehension_status
+
+    current = get_concept_score(session_id, concept) or {}
+    direct_answer_score = _safe_float(new_signal.get("direct_answer_score", current.get("direct_answer_score", 0.0)))
+    temporal_score = _safe_float(new_signal.get("temporal_score", current.get("temporal_score", 0.0)))
+    probe_depth_score = _safe_float(new_signal.get("probe_depth_score", current.get("probe_depth_score", 0.0)))
+    trap_score = _safe_float(new_signal.get("trap_score", current.get("trap_score", 0.0)))
+    verification_signal = _safe_float(new_signal.get("verification_signal", current.get("verification_signal", 0.0)))
+
+    true_comprehension = compute_true_comprehension(
+        direct_answer_score=direct_answer_score,
+        temporal_score=temporal_score,
+        probe_depth_score=probe_depth_score,
+        trap_score=trap_score,
+    )
+    status = derive_comprehension_status(
+        true_comprehension=true_comprehension,
+        diagram_verified=verification_signal >= 0.6,
+    )
+
+    upsert_concept_score(
+        session_id=session_id,
+        concept=concept,
+        direct_answer_score=direct_answer_score,
+        temporal_score=temporal_score,
+        probe_depth_score=probe_depth_score,
+        trap_score=trap_score,
+        true_comprehension=true_comprehension,
+        status=status,
+        verification_signal=verification_signal,
+    )
+
+    return {
+        "session_id": session_id,
+        "concept": concept,
+        "direct_answer_score": direct_answer_score,
+        "temporal_score": temporal_score,
+        "probe_depth_score": probe_depth_score,
+        "trap_score": trap_score,
+        "verification_signal": verification_signal,
+        "true_comprehension": true_comprehension,
+        "status": status,
+    }
+
+
+def get_student_debt_report(student_id: str) -> Dict[str, List[Dict[str, Any]]]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT cs.*, s.student_id
+            FROM concept_scores cs
+            JOIN sessions s ON s.id = cs.session_id
+            WHERE s.student_id = ? AND cs.true_comprehension < 0.6
+            ORDER BY cs.true_comprehension ASC
+            """,
+            (student_id,),
+        ).fetchall()
+
+    grouped: Dict[str, List[Dict[str, Any]]] = {
+        "live_session_required": [],
+        "unverified": [],
+        "shallow": [],
+    }
+    for row in rows:
+        status = row.get("status", "unverified")
+        grouped.setdefault(status, []).append(row)
+    return grouped
+
+
+def log_audit_event(
+    event_type: str,
+    session_id: Optional[str],
+    student_id: Optional[str],
+    concept: Optional[str],
+    inputs: Dict[str, Any],
+    decision: Dict[str, Any],
+) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO audit_log (event_type, session_id, student_id, concept, inputs_json, decision_json)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                event_type,
+                session_id,
+                student_id,
+                concept,
+                json.dumps(inputs, sort_keys=True),
+                json.dumps(decision, sort_keys=True),
+            ),
+        )
+
+
+def register_probe(session_id: str, concept: str, strategy: str, probe_text: str) -> int:
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO probe_registry (session_id, concept, strategy, probe_text, is_wrong_trap)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (session_id, concept, strategy, probe_text, int(strategy == "WRONG_TRAP")),
+        )
+        return int(cursor.lastrowid)
+
+
+def resolve_probe(probe_id: int, student_corrected: Optional[bool]) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE probe_registry
+            SET resolved = 1, student_corrected = ?, created_at = created_at
+            WHERE id = ?
+            """,
+            (None if student_corrected is None else int(student_corrected), probe_id),
+        )
+
+
+def get_pending_wrong_traps(session_id: str, concept: str) -> List[Dict[str, Any]]:
+    with get_connection() as conn:
+        return conn.execute(
+            """
+            SELECT * FROM probe_registry
+            WHERE session_id = ? AND concept = ? AND is_wrong_trap = 1 AND resolved = 0
+            ORDER BY id DESC
+            """,
+            (session_id, concept),
+        ).fetchall()
+
+
+def register_socratic_interrupt(session_id: str, concept: str, student_excerpt: str, probe_text: str) -> int:
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO socratic_interrupts (session_id, concept, student_excerpt, probe_text)
+            VALUES (?, ?, ?, ?)
+            """,
+            (session_id, concept, student_excerpt, probe_text),
+        )
+        return int(cursor.lastrowid)
+
+
+def resolve_socratic_interrupts(session_id: str) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE socratic_interrupts
+            SET resolved = 1, resolved_at = CURRENT_TIMESTAMP
+            WHERE session_id = ? AND resolved = 0
+            """,
+            (session_id,),
+        )
+
+
+def mark_aborted_interrupts_and_penalize(idle_seconds: int = 300) -> int:
+    threshold = (datetime.utcnow() - timedelta(seconds=idle_seconds)).strftime("%Y-%m-%d %H:%M:%S")
+    penalized = 0
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM socratic_interrupts
+            WHERE resolved = 0 AND penalized = 0 AND created_at <= ?
+            """,
+            (threshold,),
+        ).fetchall()
+
+        for row in rows:
+            session_row = conn.execute(
+                "SELECT id FROM sessions WHERE id = ? LIMIT 1",
+                (row.get("session_id"),),
+            ).fetchone()
+            if session_row:
+                cs = conn.execute(
+                    "SELECT probe_depth_score FROM concept_scores WHERE session_id = ? AND concept = ?",
+                    (session_row["id"], row.get("concept")),
+                ).fetchone()
+                existing_depth = _safe_float(cs.get("probe_depth_score", 0.0) if cs else 0.0)
+                penalized_depth = max(0.0, existing_depth - 0.2)
+                from .anti_gaming import compute_true_comprehension, derive_comprehension_status
+                full = conn.execute(
+                    "SELECT * FROM concept_scores WHERE session_id = ? AND concept = ?",
+                    (session_row["id"], row.get("concept")),
+                ).fetchone() or {}
+                direct = _safe_float(full.get("direct_answer_score", 0.0))
+                temporal = _safe_float(full.get("temporal_score", 0.0))
+                trap = _safe_float(full.get("trap_score", 0.0))
+                verification_signal = _safe_float(full.get("verification_signal", 0.0))
+                true_comp = compute_true_comprehension(direct, temporal, penalized_depth, trap)
+                status = derive_comprehension_status(true_comp, diagram_verified=verification_signal >= 0.6)
+                conn.execute(
+                    """
+                    INSERT INTO concept_scores
+                        (session_id, concept, direct_answer_score, temporal_score, probe_depth_score,
+                         trap_score, true_comprehension, status, verification_signal)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(session_id, concept) DO UPDATE SET
+                        direct_answer_score = excluded.direct_answer_score,
+                        temporal_score = excluded.temporal_score,
+                        probe_depth_score = excluded.probe_depth_score,
+                        trap_score = excluded.trap_score,
+                        true_comprehension = excluded.true_comprehension,
+                        status = excluded.status,
+                        verification_signal = excluded.verification_signal
+                    """,
+                    (
+                        session_row["id"],
+                        row.get("concept"),
+                        direct,
+                        temporal,
+                        penalized_depth,
+                        trap,
+                        true_comp,
+                        status,
+                        verification_signal,
+                    ),
+                )
+                penalized += 1
+
+            conn.execute(
+                "UPDATE socratic_interrupts SET penalized = 1 WHERE id = ?",
+                (row["id"],),
+            )
+    return penalized
+
+
+def penalize_open_interrupts_for_session(session_id: str) -> int:
+    penalized = 0
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM socratic_interrupts
+            WHERE session_id = ? AND resolved = 0 AND penalized = 0
+            """,
+            (session_id,),
+        ).fetchall()
+        for row in rows:
+            session_row = conn.execute(
+                "SELECT id FROM sessions WHERE id = ? LIMIT 1",
+                (session_id,),
+            ).fetchone()
+            if session_row:
+                cs = conn.execute(
+                    "SELECT probe_depth_score FROM concept_scores WHERE session_id = ? AND concept = ?",
+                    (session_row["id"], row.get("concept")),
+                ).fetchone()
+                existing_depth = _safe_float(cs.get("probe_depth_score", 0.0) if cs else 0.0)
+                penalized_depth = max(0.0, existing_depth - 0.2)
+                from .anti_gaming import compute_true_comprehension, derive_comprehension_status
+                full = conn.execute(
+                    "SELECT * FROM concept_scores WHERE session_id = ? AND concept = ?",
+                    (session_row["id"], row.get("concept")),
+                ).fetchone() or {}
+                direct = _safe_float(full.get("direct_answer_score", 0.0))
+                temporal = _safe_float(full.get("temporal_score", 0.0))
+                trap = _safe_float(full.get("trap_score", 0.0))
+                verification_signal = _safe_float(full.get("verification_signal", 0.0))
+                true_comp = compute_true_comprehension(direct, temporal, penalized_depth, trap)
+                status = derive_comprehension_status(true_comp, diagram_verified=verification_signal >= 0.6)
+                conn.execute(
+                    """
+                    INSERT INTO concept_scores
+                        (session_id, concept, direct_answer_score, temporal_score, probe_depth_score,
+                         trap_score, true_comprehension, status, verification_signal)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(session_id, concept) DO UPDATE SET
+                        direct_answer_score = excluded.direct_answer_score,
+                        temporal_score = excluded.temporal_score,
+                        probe_depth_score = excluded.probe_depth_score,
+                        trap_score = excluded.trap_score,
+                        true_comprehension = excluded.true_comprehension,
+                        status = excluded.status,
+                        verification_signal = excluded.verification_signal
+                    """,
+                    (
+                        session_row["id"],
+                        row.get("concept"),
+                        direct,
+                        temporal,
+                        penalized_depth,
+                        trap,
+                        true_comp,
+                        status,
+                        verification_signal,
+                    ),
+                )
+            conn.execute(
+                "UPDATE socratic_interrupts SET penalized = 1, resolved = 1, resolved_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (row["id"],),
+            )
+            penalized += 1
+    return penalized
 
 
 def get_real_performance_by_session(session_id: str) -> Optional[Dict[str, Any]]:

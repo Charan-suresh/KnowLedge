@@ -2,6 +2,7 @@ import json
 import asyncio
 import logging
 import uuid
+import base64
 import httpx
 import queue
 from datetime import datetime, timedelta
@@ -26,8 +27,9 @@ from .sync.audit_log import get_sync_audit
 from .routers import progress, reports
 from .routers.ingest import router as ingest_router
 from .routers.classroom import router as classroom_router
-from .agents.inference_router import check_health, get_health_status
+from .agents.inference_router import check_health, get_health_status, chat_async
 from .integrity.session_fingerprint import generate_device_key_if_missing
+from .anti_gaming import score_temporal_fingerprint_with_breakdown, generate_probe
 
 logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parent
@@ -176,6 +178,22 @@ class SageRequest(BaseModel):
     concept: str
     chat_history: List[Dict[str, str]]
     session_id: str | None = None
+    student_id: str | None = None
+    temporal_fingerprint: Dict[str, Any] | None = None
+
+
+class ProbeRequest(BaseModel):
+    session_id: str
+    concept: str
+    student_response: str
+    difficulty: str = "medium"
+    artifact_context: str | None = None
+
+
+class SessionEventRequest(BaseModel):
+    session_id: str
+    concept: str
+    event_type: str
 
 class MarkOwnedRequest(BaseModel):
     concept: str
@@ -344,10 +362,139 @@ async def trigger_scout(req: ScoutRequest):
 async def trigger_sage(req: SageRequest):
     """Synchronous Sage turn — used by the standalone dashboard modal."""
     try:
-        result = orchestrator.trigger_clearing(req.concept, req.chat_history, session_id=req.session_id)
+        concept = (req.concept or "").strip()
+        if not concept:
+            raise HTTPException(status_code=400, detail="Concept is required")
+
+        student_id = (req.student_id or "anonymous").strip() or "anonymous"
+        db_session_id = db.get_or_create_learning_session(student_id, concept)
+        if req.session_id:
+            db.set_session_alias(req.session_id, db_session_id)
+
+        if req.temporal_fingerprint:
+            temporal_breakdown = score_temporal_fingerprint_with_breakdown(req.temporal_fingerprint)
+            temporal_score = float(temporal_breakdown["score"])
+            db.update_comprehension_score(
+                session_id=db_session_id,
+                concept=concept,
+                new_signal={"temporal_score": temporal_score},
+            )
+            db.log_audit_event(
+                event_type="temporal_score",
+                session_id=str(db_session_id),
+                student_id=student_id,
+                concept=concept,
+                inputs=req.temporal_fingerprint,
+                decision=temporal_breakdown,
+            )
+
+        pending_traps = db.get_pending_wrong_traps(str(db_session_id), concept)
+        latest_student_text = ""
+        for msg in reversed(req.chat_history):
+            if (msg.get("role") or "").lower() in {"user", "student"}:
+                latest_student_text = (msg.get("content") or "").strip().lower()
+                break
+
+        if pending_traps and latest_student_text:
+            agreed = any(token in latest_student_text for token in ("yes", "correct", "right", "exactly"))
+            corrected = any(token in latest_student_text for token in ("no", "not", "incorrect", "actually", "instead"))
+            trap_score = 0.0 if agreed and not corrected else 1.0
+            for trap in pending_traps:
+                db.resolve_probe(trap["id"], student_corrected=(trap_score >= 0.99))
+            db.update_comprehension_score(
+                session_id=db_session_id,
+                concept=concept,
+                new_signal={"trap_score": trap_score},
+            )
+            db.log_audit_event(
+                event_type="wrong_trap_resolution",
+                session_id=str(db_session_id),
+                student_id=student_id,
+                concept=concept,
+                inputs={"latest_student_text": latest_student_text, "pending_traps": len(pending_traps)},
+                decision={"trap_score": trap_score},
+            )
+
+        result = orchestrator.trigger_clearing(
+            concept,
+            req.chat_history,
+            session_id=req.session_id,
+            student_id=student_id,
+            db_session_id=db_session_id,
+        )
+        direct_answer_score = 0.85 if result.cleared else 0.45
+        probe_depth_score = min(1.0, max(0.1, len(req.chat_history) / 4.0))
+        comprehension = db.update_comprehension_score(
+            session_id=db_session_id,
+            concept=concept,
+            new_signal={
+                "direct_answer_score": direct_answer_score,
+                "probe_depth_score": probe_depth_score,
+            },
+        )
+        db.log_audit_event(
+            event_type="comprehension_update",
+            session_id=str(db_session_id),
+            student_id=student_id,
+            concept=concept,
+            inputs={"direct_answer_score": direct_answer_score, "probe_depth_score": probe_depth_score},
+            decision=comprehension,
+        )
         return {"cleared": result.cleared, "response": result.response}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/sage/probe")
+async def create_probe(req: ProbeRequest):
+    probe_data = generate_probe(
+        student_response=req.student_response,
+        concept=req.concept,
+        artifact_context=req.artifact_context,
+        difficulty=req.difficulty,
+    )
+    probe_id = db.register_probe(req.session_id, req.concept, probe_data["strategy"], probe_data["probe"])
+    db.log_audit_event(
+        event_type="probe_generated",
+        session_id=req.session_id,
+        student_id=None,
+        concept=req.concept,
+        inputs={
+            "difficulty": req.difficulty,
+            "artifact_context": bool(req.artifact_context),
+            "student_response_length": len(req.student_response or ""),
+        },
+        decision={"probe_id": probe_id, "strategy": probe_data["strategy"], "probe": probe_data["probe"]},
+    )
+    return {"probe": probe_data["probe"], "strategy": probe_data["strategy"], "probe_id": probe_id}
+
+
+@app.post("/api/sage/session-event")
+async def record_sage_session_event(req: SessionEventRequest):
+    event = (req.event_type or "").strip().lower()
+    session_id = (req.session_id or "").strip()
+    concept = (req.concept or "").strip()
+    if not session_id or not concept:
+        raise HTTPException(status_code=400, detail="session_id and concept are required")
+
+    penalized = 0
+    if event == "close":
+        resolved_session_id = session_id
+        if not session_id.isdigit():
+            alias = db.get_db_session_id_from_alias(session_id)
+            if alias is not None:
+                resolved_session_id = str(alias)
+        penalized = db.penalize_open_interrupts_for_session(resolved_session_id)
+
+    db.log_audit_event(
+        event_type="session_event",
+        session_id=session_id,
+        student_id=None,
+        concept=concept,
+        inputs={"event_type": event},
+        decision={"penalized_interrupts": penalized},
+    )
+    return {"status": "ok", "penalized_interrupts": penalized}
 
 
 @app.post("/api/sage/start-solo")
@@ -455,6 +602,98 @@ async def trigger_lens(concept: str = Form(...), file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/verify-diagram")
+async def verify_diagram(
+    image: UploadFile = File(...),
+    concept: str = Form(...),
+    expected_elements: List[str] = Form(...),
+):
+    raw_elements: List[str] = expected_elements or []
+    if len(raw_elements) == 1:
+        candidate = (raw_elements[0] or "").strip()
+        if candidate.startswith("[") and candidate.endswith("]"):
+            try:
+                parsed = json.loads(candidate)
+                if isinstance(parsed, list):
+                    raw_elements = [str(x) for x in parsed]
+            except Exception:
+                pass
+
+    image_bytes = await image.read()
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="Image is empty")
+
+    image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+    expected_text = ", ".join(raw_elements)
+    prompt = (
+        "You are verifying a student-submitted diagram photo. Return strict JSON with keys: "
+        "verified (bool), elements_found (array of strings), is_likely_handwritten (bool), confidence (0..1). "
+        "Assess whether this looks hand-drawn on paper (imperfect lines, shadows, texture) and not a clean digital screenshot. "
+        "If it looks digital, set is_likely_handwritten=false and reduce confidence. "
+        f"Concept: {concept}. Expected elements: {expected_text}."
+    )
+
+    model_response = await chat_async(
+        model=config.LENS_MODEL,
+        messages=[
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": prompt}],
+                "images": [image_b64],
+            }
+        ],
+        format="json",
+    )
+    content = (model_response.get("message", {}) or {}).get("content", "")
+
+    try:
+        parsed = json.loads(content)
+    except Exception:
+        parsed = {
+            "verified": False,
+            "elements_found": [],
+            "is_likely_handwritten": False,
+            "confidence": 0.2,
+        }
+
+    verified = bool(parsed.get("verified", False))
+    elements_found = parsed.get("elements_found", []) or []
+    is_likely_handwritten = bool(parsed.get("is_likely_handwritten", False))
+    confidence = float(parsed.get("confidence", 0.0) or 0.0)
+    confidence = max(0.0, min(1.0, confidence))
+    if not is_likely_handwritten:
+        confidence = min(confidence, 0.35)
+        verified = False
+
+    db_session_id = db.get_or_create_learning_session("anonymous", concept.strip())
+    comprehension = db.update_comprehension_score(
+        session_id=db_session_id,
+        concept=concept.strip(),
+        new_signal={"verification_signal": confidence if verified else 0.0},
+    )
+    db.log_audit_event(
+        event_type="diagram_verification",
+        session_id=str(db_session_id),
+        student_id="anonymous",
+        concept=concept.strip(),
+        inputs={"expected_elements": raw_elements},
+        decision={
+            "verified": verified,
+            "elements_found": elements_found,
+            "is_likely_handwritten": is_likely_handwritten,
+            "confidence": confidence,
+            "comprehension_status": comprehension.get("status"),
+        },
+    )
+
+    return {
+        "verified": verified,
+        "elements_found": elements_found,
+        "is_likely_handwritten": is_likely_handwritten,
+        "confidence": confidence,
+    }
+
+
 @app.post("/api/sync/share-weekly")
 async def sync_share_weekly():
     return send_weekly_payload()
@@ -487,6 +726,17 @@ async def sync_audit():
 @app.get("/api/integrity/report")
 async def integrity_report():
     return db.get_integrity_summary()
+
+
+@app.get("/api/comprehension/debt-report")
+async def comprehension_debt_report(student_id: str = Query(...)):
+    value = (student_id or "").strip()
+    if not value:
+        raise HTTPException(status_code=400, detail="student_id is required")
+    return {
+        "student_id": value,
+        "grouped_concepts": db.get_student_debt_report(value),
+    }
 
 
 @app.get("/api/report/before-after")

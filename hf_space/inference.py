@@ -37,7 +37,7 @@ except Exception as exc:
     _llama_import_error = exc
     Llama = None
 
-MODEL_REPO = os.getenv("GEMMA_2B_GGUF_REPO", "unsloth/gemma-2-2b-it-GGUF")
+MODEL_REPO = os.getenv("GEMMA_2B_GGUF_REPO", "bartowski/gemma-2-2b-it-GGUF")
 MODEL_FILE = os.getenv("GEMMA_2B_GGUF_FILE", "gemma-2-2b-it-Q4_K_M.gguf")
 
 # Try common filename variants in case upstream naming changes.

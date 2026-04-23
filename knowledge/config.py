@@ -71,6 +71,7 @@ SPOOFED_THRESHOLD = int(os.getenv("SPOOFED_THRESHOLD", "3"))
 INTEGRITY_VARIANCE_THRESHOLD = float(os.getenv("INTEGRITY_VARIANCE_THRESHOLD", "3.0"))
 DEVICE_KEY_PATH = os.getenv("DEVICE_KEY_PATH", "~/.knowledge/device.key")
 SOLO_REQUIRES_VOICE_OR_LENS = os.getenv("SOLO_REQUIRES_VOICE_OR_LENS", "true").lower() == "true"
+SOCRATIC_INTERRUPT_PROBABILITY = float(os.getenv("SOCRATIC_INTERRUPT_PROBABILITY", "0.30"))
 
 
 def get_runtime_llm_config() -> Dict[str, str]:

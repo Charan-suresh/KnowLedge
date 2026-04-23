@@ -3,6 +3,8 @@ import queue
 import time
 import logging
 import uuid
+import random
+import re
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 
@@ -15,6 +17,7 @@ from .integrity.session_fingerprint import build_session_fingerprint, sign_finge
 from .integrity.anti_spoof import analyze_integrity, make_lens_signature
 from .prompt_engineering import generate_solo_question
 from .assessment import evaluate_real_learning
+from .anti_gaming import generate_probe
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +56,21 @@ class Orchestrator:
             except Exception as e:
                 logger.error(f"Error in Scout worker: {e}")
 
-    def trigger_clearing(self, concept: str, chat_history: List[Dict[str, Any]], session_id: Optional[str] = None) -> ClearingResult:
+    def _extract_first_sentence(self, text: str) -> str:
+        snippet = (text or "").strip()
+        if not snippet:
+            return ""
+        parts = re.split(r"(?<=[.!?])\s+", snippet, maxsplit=1)
+        return parts[0].strip()
+
+    def trigger_clearing(
+        self,
+        concept: str,
+        chat_history: List[Dict[str, Any]],
+        session_id: Optional[str] = None,
+        student_id: Optional[str] = None,
+        db_session_id: Optional[int] = None,
+    ) -> ClearingResult:
         """
         Pulls the debt log for that concept from SQLite, invokes Sage synchronously.
         Updates the row status to clear or persists in SQLite. Emits CLEARING_COMPLETE if clear.
@@ -63,10 +80,47 @@ class Orchestrator:
             self.resource_lock.acquire()
 
         try:
+            db.mark_aborted_interrupts_and_penalize(idle_seconds=5 * 60)
             debt_log = db.get_debt_by_concept(concept)
             effective_session_id = session_id or f"sage-{uuid.uuid4().hex[:10]}"
+            active_student_message = ""
+            for msg in reversed(chat_history):
+                if (msg.get("role") or "").lower() in {"user", "student"}:
+                    active_student_message = str(msg.get("content") or "")
+                    break
+
+            should_interrupt = (
+                bool(active_student_message.strip())
+                and random.random() < max(0.0, min(1.0, config.SOCRATIC_INTERRUPT_PROBABILITY))
+            )
+            if should_interrupt:
+                first_sentence = self._extract_first_sentence(active_student_message)
+                probe_data = generate_probe(
+                    student_response=first_sentence,
+                    concept=concept,
+                    artifact_context=first_sentence,
+                    difficulty="medium",
+                    strategy="SPECIFICITY_PROBE",
+                )
+                probe_text = probe_data["probe"]
+                if db_session_id is not None:
+                    db.register_socratic_interrupt(str(db_session_id), concept, first_sentence, probe_text)
+                else:
+                    db.register_socratic_interrupt(effective_session_id, concept, first_sentence, probe_text)
+                db.log_audit_event(
+                    event_type="socratic_interrupt",
+                    session_id=str(db_session_id) if db_session_id is not None else effective_session_id,
+                    student_id=student_id,
+                    concept=concept,
+                    inputs={"first_sentence": first_sentence},
+                    decision={"probe": probe_text, "strategy": "SPECIFICITY_PROBE"},
+                )
+                self.event_bus.put({"type": "SOCRATIC_INTERRUPT", "concept": concept})
+                return ClearingResult(cleared=False, response=f"Hold on - before you finish, {probe_text}")
+
             started_at = datetime.utcnow() - timedelta(seconds=max(5, len(chat_history) * 2))
             result = run_session(concept, debt_log, chat_history)
+            db.resolve_socratic_interrupts(str(db_session_id) if db_session_id is not None else effective_session_id)
 
             fingerprint = build_session_fingerprint(
                 session_id=effective_session_id,

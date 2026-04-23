@@ -27,5 +27,3 @@ cloud-run/invoker-key.json
 *.log
 
 # Generated tool output
-knowledge-mobile/node_modules/
-knowledge-mobile/.expo/
