@@ -550,10 +550,7 @@
           const data = JSON.parse(e.data);
           if (data.token !== undefined) {
             fullReply = data.token;
-            // Render \n\n as paragraph break, \n as line break
-            bubble.innerHTML = fullReply
-              .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-              .replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>');
+            bubble.textContent = fullReply;
             bubble.classList.remove('streaming');
             body.scrollTop = body.scrollHeight;
           }

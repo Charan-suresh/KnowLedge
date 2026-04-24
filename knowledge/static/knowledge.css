@@ -476,6 +476,7 @@
   .modal-backdrop.open { display: flex; opacity: 1; pointer-events: all; }
   .modal-card {
     background: white; width: 100%; max-width: 520px;
+    max-height: 90vh;
     border-radius: 20px; box-shadow: var(--shadow-lg);
     transform: translateY(16px); transition: transform 0.3s ease;
     display: flex; flex-direction: column; overflow: hidden;
@@ -498,11 +499,13 @@
 
   .modal-body {
     padding: 24px; background: var(--cream);
-    min-height: 200px; max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px;
+    min-height: 200px; flex: 1; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 16px;
   }
   .bubble {
-    padding: 12px 16px; font-size: 14px; line-height: 1.5;
-    max-width: 85%;
+    padding: 12px 16px; font-size: 14px; line-height: 1.6;
+    max-width: 85%; word-wrap: break-word; overflow-wrap: break-word;
+    white-space: pre-wrap;
   }
   .bubble.sage {
     background: var(--cream-deep); color: var(--ink);
