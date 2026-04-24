@@ -1,6 +1,8 @@
 import json
 import random
 import statistics
+from difflib import SequenceMatcher
+from enum import Enum
 from typing import Any, Dict, Optional
 
 from .. import config
@@ -33,6 +35,13 @@ PROBE_STRATEGIES = (
     "WRONG_TRAP",
     "COMPRESSION_PROBE",
 )
+
+
+class ResponseSignal(str, Enum):
+    STRUGGLING = "STRUGGLING"
+    CONFIDENT = "CONFIDENT"
+    UNCERTAIN = "UNCERTAIN"
+    SUSPICIOUS = "SUSPICIOUS"
 
 
 def _clamp01(value: float) -> float:
@@ -151,14 +160,79 @@ def pick_probe_strategy(student_response: str, difficulty: str) -> str:
     return "SCALE_PROBE"
 
 
+def classify_student_response(text: str, temporal_score: Optional[float] = None) -> ResponseSignal:
+    content = (text or "").strip()
+    lowered = content.lower()
+
+    if temporal_score is not None and float(temporal_score) < 0.4:
+        return ResponseSignal.SUSPICIOUS
+
+    if any(token in lowered for token in ("i don't know", "dont know", "not sure", "maybe", "idk")):
+        return ResponseSignal.UNCERTAIN
+
+    words = [w for w in content.split() if w.strip()]
+    word_count = len(words)
+    if word_count < 30:
+        return ResponseSignal.STRUGGLING
+
+    technical_vocab = {
+        "complexity", "runtime", "asymptotic", "recursion", "invariant", "pointer",
+        "heap", "stack", "tree", "graph", "traversal", "binary", "search", "hash",
+        "normalization", "schema", "concurrency", "latency", "throughput", "cache",
+    }
+    vocab_hits = sum(1 for w in words if w.lower().strip(".,:;!?()[]{}\"'") in technical_vocab)
+    if word_count >= 45 and vocab_hits >= 3:
+        return ResponseSignal.CONFIDENT
+
+    return ResponseSignal.STRUGGLING
+
+
+def _strategy_for_signal(signal: Optional[ResponseSignal], student_response: str, difficulty: str) -> str:
+    if signal is None:
+        return pick_probe_strategy(student_response, difficulty)
+    if signal == ResponseSignal.STRUGGLING:
+        return "COMPRESSION_PROBE"
+    if signal == ResponseSignal.UNCERTAIN:
+        return "COMPRESSION_PROBE"
+    if signal == ResponseSignal.SUSPICIOUS:
+        return "SPECIFICITY_PROBE"
+    # CONFIDENT
+    return "WRONG_TRAP" if random.random() < 0.5 else "SCALE_PROBE"
+
+
+def _is_semantic_duplicate(candidate: str, prior_questions: list[str], threshold: float = 0.75) -> bool:
+    normalized = (candidate or "").strip().lower()
+    if not normalized:
+        return True
+    for prior in prior_questions:
+        ratio = SequenceMatcher(None, normalized, (prior or "").strip().lower()).ratio()
+        if ratio > threshold:
+            return True
+    return False
+
+
+def _escalate_strategy(strategy: str) -> str:
+    if strategy == "SCALE_PROBE":
+        return "COMPRESSION_PROBE"
+    if strategy == "COMPRESSION_PROBE":
+        return "SPECIFICITY_PROBE"
+    if strategy == "SPECIFICITY_PROBE":
+        return "WRONG_TRAP"
+    return "SCALE_PROBE"
+
+
 def generate_probe(
     student_response: str,
     concept: str,
     artifact_context: Optional[str],
     difficulty: str,
     strategy: Optional[str] = None,
+    conversation_history_block: str = "",
+    asked_questions: Optional[list[str]] = None,
+    max_regeneration_attempts: int = 3,
+    response_signal: Optional[ResponseSignal] = None,
 ) -> Dict[str, str]:
-    chosen_strategy = strategy or pick_probe_strategy(student_response, difficulty)
+    chosen_strategy = strategy or _strategy_for_signal(response_signal, student_response, difficulty)
     if chosen_strategy not in PROBE_STRATEGIES:
         chosen_strategy = "SPECIFICITY_PROBE"
 
@@ -170,38 +244,71 @@ def generate_probe(
         "SCALE_PROBE": "Change one concrete constraint (size, speed, edge or failure case) and ask how their answer changes.",
         "SPECIFICITY_PROBE": "Ask about a detail from the student's exact wording or artifact, not generic theory.",
         "WRONG_TRAP": "State one subtly incorrect claim about the concept and ask the student to react. Keep it plausible.",
-        "COMPRESSION_PROBE": "Ask the student to explain to a non-technical person in 2 sentences max.",
+        "COMPRESSION_PROBE": "Ask a simpler scaffolding question that narrows to one core step or example.",
     }
 
-    system_prompt = (
-        "You are Sage, a warm Socratic tutor. Generate exactly ONE follow-up probe question and nothing else. "
-        "Do not answer the question yourself. Keep it under 35 words.\n"
-        f"Probe strategy: {chosen_strategy}\n"
-        f"Strategy instruction: {strategy_directives[chosen_strategy]}\n"
-        f"Concept: {concept}\n"
-        f"Student response:\n{(student_response or '').strip()}\n"
-        f"Difficulty: {difficulty}\n"
-        f"{artifact_block}"
-    )
+    prior_questions = [(q or "").strip() for q in (asked_questions or []) if (q or "").strip()]
+    history_text = (conversation_history_block or "").strip()
+    duplicate_note = ""
+    question = ""
+    active_strategy = chosen_strategy
 
-    response = chat(
-        model=config.SAGE_MODEL,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": "Return one probe question only."},
-        ],
-    )
-    question = (response.get("message", {}) or {}).get("content", "").strip()
-    if not question:
-        question = "Can you walk me through one concrete example from your own solution?"
+    for _ in range(max(0, int(max_regeneration_attempts)) + 1):
+        system_prompt = (
+            "You are Sage, a warm Socratic tutor. Generate exactly ONE follow-up probe question and nothing else. "
+            "Do not answer the question yourself. Keep it under 35 words.\n"
+            f"Probe strategy: {active_strategy}\n"
+            f"Strategy instruction: {strategy_directives[active_strategy]}\n"
+            f"Concept: {concept}\n"
+            f"Student response:\n{(student_response or '').strip()}\n"
+            f"Difficulty: {difficulty}\n"
+            f"{artifact_block}"
+        )
 
-    question = question.replace("\n", " ").strip().strip('"')
-    if not question.endswith("?"):
-        question = f"{question.rstrip('.')}?"
+        user_prompt = "Return one probe question only."
+        if history_text:
+            user_prompt = (
+                f"{history_text}\n\n"
+                "You have already asked the questions above. Do NOT repeat or rephrase any of them. "
+                "Your next question must probe a NEW aspect.\n"
+                f"{duplicate_note}"
+                "Return one probe question only."
+            )
+
+        response = chat(
+            model=config.SAGE_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+        question = (response.get("message", {}) or {}).get("content", "").strip()
+        if not question:
+            question = "Can you walk me through one concrete example from your own solution?"
+
+        question = question.replace("\n", " ").strip().strip('"')
+        if not question.endswith("?"):
+            question = f"{question.rstrip('.')}?"
+
+        if not _is_semantic_duplicate(question, prior_questions):
+            break
+        duplicate_note = (
+            "The previous candidate question was semantically too similar to prior questions. "
+            "Pick a clearly different angle.\n"
+        )
+    else:
+        # Regeneration attempts exhausted: switch strategy and produce a new angle.
+        active_strategy = _escalate_strategy(active_strategy)
+        question = {
+            "COMPRESSION_PROBE": f"Can you explain one simple first step for {concept} using your own example?",
+            "SPECIFICITY_PROBE": "Which exact line or step in your own artifact proves your claim, and why?",
+            "WRONG_TRAP": f"If {concept} always has O(1) complexity, would your explanation still hold? Why?",
+            "SCALE_PROBE": f"How would your answer change if the input size were 1000x larger?",
+        }.get(active_strategy, "Can you show one concrete example from your own work?")
 
     return {
         "probe": question,
-        "strategy": chosen_strategy,
+        "strategy": active_strategy,
     }
 
 

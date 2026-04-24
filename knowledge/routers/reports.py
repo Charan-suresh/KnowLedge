@@ -3,6 +3,8 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 import io
 import csv
 from .. import db
+from .. import config
+from ..agents.inference_router import chat
 
 router = APIRouter()
 
@@ -47,3 +49,56 @@ async def export_reports(format: str = "csv"):
         media_type="text/csv", 
         headers={"Content-Disposition": "attachment; filename=class_report.csv"}
     )
+
+
+def _recommend_for_concept(concept: str, score: float) -> str:
+    prompt = (
+        "You are Sage. Generate one short study recommendation (max 14 words). "
+        "No bullet points, no numbering, no preamble. "
+        f"Concept: {concept}. Current comprehension score: {score:.2f}."
+    )
+    try:
+        response = chat(
+            model=config.SAGE_MODEL,
+            messages=[
+                {"role": "system", "content": "Return one concise recommendation sentence only."},
+                {"role": "user", "content": prompt},
+            ],
+        )
+        text = (response.get("message", {}) or {}).get("content", "").strip()
+        return text or f"Review {concept} with one worked example and one edge case."
+    except Exception:
+        return f"Review {concept} with one worked example and one edge case."
+
+
+@router.get("/reports/{student_id}")
+async def get_student_report(student_id: str):
+    value = (student_id or "").strip()
+    if not value:
+        return {
+            "student_id": "",
+            "per_concept": [],
+            "comprehension_debt": [],
+            "temporal_anomaly_count": 0,
+            "recommended_actions": [],
+            "session_history": [],
+        }
+
+    snapshot = db.get_student_report_data(value)
+    debt = snapshot.get("debt_concepts", [])
+    recommendations = [
+        {
+            "concept": row["concept"],
+            "recommendation": _recommend_for_concept(row["concept"], float(row["comprehension_score"])),
+        }
+        for row in debt
+    ]
+
+    return {
+        "student_id": value,
+        "per_concept": snapshot.get("per_concept", []),
+        "comprehension_debt": debt,
+        "temporal_anomaly_count": snapshot.get("temporal_anomaly_count", 0),
+        "recommended_actions": recommendations,
+        "session_history": snapshot.get("session_history", []),
+    }

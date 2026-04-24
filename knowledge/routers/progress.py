@@ -41,3 +41,22 @@ async def get_progress_data(days: int = 30):
     progress_data = db.get_progress_over_time(days)
     clearing_velocity = db.get_clearing_velocity(min(days, 14))
     return {"progress": progress_data, "velocity": clearing_velocity}
+
+
+@router.get("/progress/{student_id}", response_class=JSONResponse)
+async def get_student_progress(student_id: str):
+    value = (student_id or "").strip()
+    if not value:
+        return {
+            "concepts": [],
+            "overall_score": 0.0,
+            "debt_concepts": [],
+            "verified_concepts": [],
+        }
+    data = db.get_student_progress_overview(value)
+    return {
+        "concepts": data.get("concepts", []),
+        "overall_score": data.get("overall_score", 0.0),
+        "debt_concepts": data.get("debt_concepts", []),
+        "verified_concepts": data.get("verified_concepts", []),
+    }

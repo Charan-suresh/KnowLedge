@@ -210,6 +210,7 @@ def run_migrations() -> None:
                 UNIQUE(session_id, concept)
             )
         """)
+        _try_add_column(conn, "concept_scores", "raw_content_snippet", "raw_content_snippet TEXT")
         conn.execute("""
             CREATE TABLE IF NOT EXISTS audit_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -254,6 +255,25 @@ def run_migrations() -> None:
                 db_session_id INTEGER NOT NULL,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (db_session_id) REFERENCES sessions(id) ON DELETE CASCADE
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS session_probe_state (
+                session_id TEXT NOT NULL,
+                concept TEXT NOT NULL,
+                asked_questions_json TEXT NOT NULL DEFAULT '[]',
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (session_id, concept)
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS probe_turns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                concept TEXT NOT NULL,
+                sage_question TEXT NOT NULL,
+                student_response TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
 
@@ -672,6 +692,66 @@ def update_comprehension_score(session_id: int, concept: str, new_signal: Dict[s
     }
 
 
+def seed_pending_concepts_from_scout(
+    session_id: int,
+    concepts: List[str],
+    raw_content: str,
+) -> List[str]:
+    cleaned = []
+    seen = set()
+    for concept in concepts:
+        value = (concept or "").strip()
+        if not value:
+            continue
+        key = value.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        cleaned.append(value)
+
+    snippet = (raw_content or "").strip()[:280]
+
+    with get_connection() as conn:
+        try:
+            for concept in cleaned:
+                conn.execute(
+                    """
+                    INSERT INTO concept_scores
+                        (session_id, concept, direct_answer_score, temporal_score, probe_depth_score,
+                         trap_score, true_comprehension, status, verification_signal, raw_content_snippet)
+                    VALUES (?, ?, NULL, NULL, NULL, NULL, NULL, 'pending', NULL, ?)
+                    ON CONFLICT(session_id, concept) DO NOTHING
+                    """,
+                    (session_id, concept, snippet),
+                )
+            return cleaned
+        except Exception:
+            conn.execute(
+                """
+                INSERT INTO concept_scores
+                    (session_id, concept, direct_answer_score, temporal_score, probe_depth_score,
+                     trap_score, true_comprehension, status, verification_signal, raw_content_snippet)
+                VALUES (?, 'unknown', NULL, NULL, NULL, NULL, NULL, 'pending', NULL, ?)
+                ON CONFLICT(session_id, concept) DO NOTHING
+                """,
+                (session_id, snippet),
+            )
+            return ["unknown"]
+
+
+def get_concepts_for_session(session_id: int) -> List[Dict[str, Any]]:
+    with get_connection() as conn:
+        return conn.execute(
+            """
+            SELECT concept, status, true_comprehension, raw_content_snippet
+            FROM concept_scores
+            WHERE session_id = ?
+            ORDER BY id DESC
+            """,
+            (session_id,),
+        ).fetchall()
+
+
 def get_student_debt_report(student_id: str) -> Dict[str, List[Dict[str, Any]]]:
     with get_connection() as conn:
         rows = conn.execute(
@@ -694,6 +774,230 @@ def get_student_debt_report(student_id: str) -> Dict[str, List[Dict[str, Any]]]:
         status = row.get("status", "unverified")
         grouped.setdefault(status, []).append(row)
     return grouped
+
+
+def get_student_progress_overview(student_id: str) -> Dict[str, Any]:
+    from .anti_gaming import compute_true_comprehension, derive_comprehension_status
+
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                cs.id,
+                cs.session_id,
+                cs.concept,
+                cs.direct_answer_score,
+                cs.temporal_score,
+                cs.probe_depth_score,
+                cs.trap_score,
+                cs.true_comprehension,
+                cs.status,
+                cs.verification_signal,
+                COALESCE(MAX(al.created_at), s.started_at) AS last_updated
+            FROM concept_scores cs
+            JOIN sessions s ON s.id = cs.session_id
+            LEFT JOIN audit_log al ON al.session_id = CAST(cs.session_id AS TEXT) AND al.concept = cs.concept
+            WHERE s.student_id = ?
+            GROUP BY cs.id
+            ORDER BY last_updated DESC
+            """,
+            (student_id,),
+        ).fetchall()
+
+        updates: List[tuple[float, str, int]] = []
+        concept_map: Dict[str, Dict[str, Any]] = {}
+        for row in rows:
+            direct = row.get("direct_answer_score")
+            temporal = row.get("temporal_score")
+            probe = row.get("probe_depth_score")
+            trap = row.get("trap_score")
+            score = row.get("true_comprehension")
+
+            if score is None:
+                score = compute_true_comprehension(
+                    direct_answer_score=0.5 if direct is None else float(direct),
+                    temporal_score=0.5 if temporal is None else float(temporal),
+                    probe_depth_score=0.5 if probe is None else float(probe),
+                    trap_score=0.5 if trap is None else float(trap),
+                )
+                status = derive_comprehension_status(
+                    true_comprehension=float(score),
+                    diagram_verified=float(row.get("verification_signal") or 0.0) >= 0.6,
+                )
+                updates.append((float(score), status, int(row["id"])))
+            else:
+                status = row.get("status") or "pending"
+
+            concept = row.get("concept") or "unknown"
+            current = concept_map.get(concept)
+            if current is None or float(score) >= float(current["true_comprehension"]):
+                concept_map[concept] = {
+                    "concept": concept,
+                    "true_comprehension": max(0.0, min(1.0, float(score))),
+                    "status": status,
+                    "last_updated": row.get("last_updated"),
+                }
+
+        if updates:
+            conn.executemany(
+                "UPDATE concept_scores SET true_comprehension = ?, status = ? WHERE id = ?",
+                updates,
+            )
+
+        session_counts = conn.execute(
+            """
+            SELECT cs.concept, COUNT(DISTINCT cs.session_id) AS sessions_count
+            FROM concept_scores cs
+            JOIN sessions s ON s.id = cs.session_id
+            WHERE s.student_id = ?
+            GROUP BY cs.concept
+            """,
+            (student_id,),
+        ).fetchall()
+
+    session_count_map = {row["concept"]: int(row.get("sessions_count") or 0) for row in session_counts}
+    concepts = []
+    for item in concept_map.values():
+        concepts.append(
+            {
+                **item,
+                "sessions_count": session_count_map.get(item["concept"], 0),
+            }
+        )
+
+    concepts.sort(key=lambda x: x["concept"].lower())
+    overall = (sum(c["true_comprehension"] for c in concepts) / len(concepts)) if concepts else 0.0
+    debt = [c for c in concepts if c["true_comprehension"] < 0.6]
+    verified = [c for c in concepts if c["true_comprehension"] >= 0.8 and c["status"] == "verified"]
+    return {
+        "concepts": concepts,
+        "overall_score": round(float(overall), 4),
+        "debt_concepts": debt,
+        "verified_concepts": verified,
+    }
+
+
+def get_student_report_data(student_id: str) -> Dict[str, Any]:
+    with get_connection() as conn:
+        sessions = conn.execute(
+            """
+            SELECT id, started_at, concept_being_studied
+            FROM sessions
+            WHERE student_id = ?
+            ORDER BY id DESC
+            """,
+            (student_id,),
+        ).fetchall()
+
+        if not sessions:
+            return {
+                "per_concept": [],
+                "debt_concepts": [],
+                "temporal_anomaly_count": 0,
+                "session_history": [],
+            }
+
+        session_ids = [int(s["id"]) for s in sessions]
+        session_id_text = [str(sid) for sid in session_ids]
+        alias_rows = conn.execute(
+            f"SELECT client_session_id, db_session_id FROM session_aliases WHERE db_session_id IN ({','.join(['?'] * len(session_ids))})",
+            session_ids,
+        ).fetchall() if session_ids else []
+        session_keys = set(session_id_text)
+        for row in alias_rows:
+            if row.get("client_session_id"):
+                session_keys.add(str(row["client_session_id"]))
+
+        score_rows = conn.execute(
+            f"""
+            SELECT cs.*, s.started_at
+            FROM concept_scores cs
+            JOIN sessions s ON s.id = cs.session_id
+            WHERE cs.session_id IN ({','.join(['?'] * len(session_ids))})
+            ORDER BY cs.id DESC
+            """,
+            session_ids,
+        ).fetchall()
+
+        probe_stats: Dict[str, Dict[str, int]] = {}
+        if session_keys:
+            keys = list(session_keys)
+            probe_rows = conn.execute(
+                f"""
+                SELECT concept,
+                       COUNT(*) AS probes_attempted,
+                       SUM(CASE WHEN resolved = 1 AND (student_corrected = 1 OR is_wrong_trap = 0) THEN 1 ELSE 0 END) AS probes_passed
+                FROM probe_registry
+                WHERE session_id IN ({','.join(['?'] * len(keys))})
+                GROUP BY concept
+                """,
+                keys,
+            ).fetchall()
+            probe_stats = {
+                row["concept"]: {
+                    "probes_attempted": int(row.get("probes_attempted") or 0),
+                    "probes_passed": int(row.get("probes_passed") or 0),
+                }
+                for row in probe_rows
+            }
+
+        per_concept_map: Dict[str, Dict[str, Any]] = {}
+        for row in score_rows:
+            concept = row.get("concept") or "unknown"
+            score = row.get("true_comprehension")
+            if score is None:
+                score = 0.5
+            if concept in per_concept_map:
+                continue
+            stats = probe_stats.get(concept, {"probes_attempted": 0, "probes_passed": 0})
+            per_concept_map[concept] = {
+                "concept": concept,
+                "comprehension_score": max(0.0, min(1.0, float(score))),
+                "status": row.get("status") or "pending",
+                "probes_attempted": stats["probes_attempted"],
+                "probes_passed": stats["probes_passed"],
+            }
+
+        temporal_anomaly_count = conn.execute(
+            """
+            SELECT COUNT(*) AS n
+            FROM audit_log
+            WHERE student_id = ?
+              AND event_type = 'temporal_score'
+              AND inputs_json LIKE '%"is_paste_detected": true%'
+            """,
+            (student_id,),
+        ).fetchone()["n"]
+
+        session_history = []
+        for session in sessions:
+            final = conn.execute(
+                """
+                SELECT status
+                FROM concept_scores
+                WHERE session_id = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (session["id"],),
+            ).fetchone()
+            session_history.append(
+                {
+                    "date": session.get("started_at"),
+                    "concept": session.get("concept_being_studied"),
+                    "final_status": (final or {}).get("status", "pending"),
+                }
+            )
+
+    per_concept = list(per_concept_map.values())
+    debt = [c for c in per_concept if c["comprehension_score"] < 0.6]
+    debt.sort(key=lambda x: x["comprehension_score"])
+    return {
+        "per_concept": per_concept,
+        "debt_concepts": debt,
+        "temporal_anomaly_count": int(temporal_anomaly_count or 0),
+        "session_history": session_history,
+    }
 
 
 def log_audit_event(
@@ -731,6 +1035,95 @@ def register_probe(session_id: str, concept: str, strategy: str, probe_text: str
             (session_id, concept, strategy, probe_text, int(strategy == "WRONG_TRAP")),
         )
         return int(cursor.lastrowid)
+
+
+def get_asked_questions(session_id: str, concept: str) -> List[str]:
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT asked_questions_json
+            FROM session_probe_state
+            WHERE session_id = ? AND concept = ?
+            """,
+            (session_id, concept),
+        ).fetchone()
+    if not row:
+        return []
+    try:
+        parsed = json.loads(row.get("asked_questions_json") or "[]")
+    except Exception:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [str(item).strip() for item in parsed if str(item).strip()]
+
+
+def append_asked_question(session_id: str, concept: str, question: str) -> None:
+    clean = (question or "").strip()
+    if not clean:
+        return
+    questions = get_asked_questions(session_id, concept)
+    questions.append(clean)
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO session_probe_state (session_id, concept, asked_questions_json, updated_at)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(session_id, concept) DO UPDATE SET
+                asked_questions_json = excluded.asked_questions_json,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (session_id, concept, json.dumps(questions)),
+        )
+
+
+def record_probe_turn(session_id: str, concept: str, sage_question: str, student_response: str = "") -> int:
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO probe_turns (session_id, concept, sage_question, student_response)
+            VALUES (?, ?, ?, ?)
+            """,
+            (session_id, concept, (sage_question or "").strip(), (student_response or "").strip()),
+        )
+        return int(cursor.lastrowid)
+
+
+def update_last_probe_turn_response(session_id: str, concept: str, student_response: str) -> None:
+    response_text = (student_response or "").strip()
+    if not response_text:
+        return
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT id
+            FROM probe_turns
+            WHERE session_id = ? AND concept = ? AND COALESCE(student_response, '') = ''
+            ORDER BY id DESC LIMIT 1
+            """,
+            (session_id, concept),
+        ).fetchone()
+        if row and row.get("id") is not None:
+            conn.execute(
+                "UPDATE probe_turns SET student_response = ? WHERE id = ?",
+                (response_text, int(row["id"])),
+            )
+
+
+def get_recent_probe_turns(session_id: str, concept: str, limit: int = 6) -> List[Dict[str, Any]]:
+    size = max(1, int(limit))
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM probe_turns
+            WHERE session_id = ? AND concept = ?
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (session_id, concept, size),
+        ).fetchall()
+    return list(reversed(rows))
 
 
 def resolve_probe(probe_id: int, student_corrected: Optional[bool]) -> None:

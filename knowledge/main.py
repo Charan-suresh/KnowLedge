@@ -27,9 +27,14 @@ from .sync.audit_log import get_sync_audit
 from .routers import progress, reports
 from .routers.ingest import router as ingest_router
 from .routers.classroom import router as classroom_router
+from .lens import ALLOWED_LENS_MIME_TYPES
 from .agents.inference_router import check_health, get_health_status, chat_async
 from .integrity.session_fingerprint import generate_device_key_if_missing
-from .anti_gaming import score_temporal_fingerprint_with_breakdown, generate_probe
+from .anti_gaming import (
+    score_temporal_fingerprint_with_breakdown,
+    generate_probe,
+    classify_student_response,
+)
 
 logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parent
@@ -173,6 +178,8 @@ db.run_migrations()
 
 class ScoutRequest(BaseModel):
     text: str
+    session_id: str | None = None
+    student_id: str | None = None
 
 class SageRequest(BaseModel):
     concept: str
@@ -188,6 +195,7 @@ class ProbeRequest(BaseModel):
     student_response: str
     difficulty: str = "medium"
     artifact_context: str | None = None
+    history_turns: int = 6
 
 
 class SessionEventRequest(BaseModel):
@@ -215,6 +223,39 @@ class SoloEvaluateRequest(BaseModel):
     concept: str
     session_id: str
     response: str
+
+
+def _resolve_db_session_id(session_id: str) -> int | None:
+    raw = (session_id or "").strip()
+    if not raw:
+        return None
+    if raw.isdigit():
+        return int(raw)
+    alias = db.get_db_session_id_from_alias(raw)
+    if alias is not None:
+        return int(alias)
+    return None
+
+
+def _format_prior_conversation(turns: list[dict[str, Any]]) -> str:
+    if not turns:
+        return ""
+
+    lines = ["[PRIOR CONVERSATION]"]
+    idx = 1
+    for turn in turns:
+        question = (turn.get("sage_question") or "").strip()
+        response = (turn.get("student_response") or "").strip()
+        if not question or not response:
+            continue
+        lines.append(f"Turn {idx} - Sage: {question}")
+        lines.append(f"Turn {idx} - Student: {response}")
+        idx += 1
+
+    if idx == 1:
+        return ""
+    lines.append("[END PRIOR CONVERSATION]")
+    return "\n".join(lines)
 
 
 # ── Page Routes ───────────────────────────────────────────────────────────────
@@ -349,6 +390,13 @@ async def update_llm_config(req: LLMConfigRequest):
 async def trigger_scout(req: ScoutRequest):
     if not req.text.strip():
         raise HTTPException(status_code=400, detail="Empty text")
+
+    student_id = (req.student_id or "anonymous").strip() or "anonymous"
+    db_session_id = db.get_or_create_learning_session(student_id, "scout_ingest")
+    if req.session_id:
+        db.set_session_alias(req.session_id, db_session_id)
+    logger.info("[scout] client_session_id=%s resolved_db_session_id=%s", req.session_id, db_session_id)
+
     # Process inline so UI refresh sees updates immediately.
     concepts = tag_content(req.text)
     inserted = 0
@@ -368,7 +416,31 @@ async def trigger_scout(req: ScoutRequest):
         orchestrator.event_bus.put({"type": "DEBT_ADDED", "concept": concept_name})
         inserted += 1
         inserted_concepts.append(concept_name)
-    return {"status": "ok", "inserted": inserted, "concepts": inserted_concepts}
+
+    seeded = db.seed_pending_concepts_from_scout(
+        session_id=db_session_id,
+        concepts=inserted_concepts,
+        raw_content=req.text,
+    )
+
+    return {
+        "status": "ok",
+        "inserted": inserted,
+        "concepts": inserted_concepts,
+        "seeded_concepts": seeded,
+        "session_id": req.session_id,
+        "db_session_id": db_session_id,
+    }
+
+
+@app.get("/concepts/{session_id}")
+async def get_session_concepts(session_id: str):
+    resolved = _resolve_db_session_id(session_id)
+    logger.info("[concepts] requested_session_id=%s resolved_db_session_id=%s", session_id, resolved)
+    if resolved is None:
+        return {"session_id": session_id, "concepts": []}
+    concepts = db.get_concepts_for_session(resolved)
+    return {"session_id": session_id, "db_session_id": resolved, "concepts": concepts}
 
 @app.post("/api/sage/turn")
 async def trigger_sage(req: SageRequest):
@@ -459,13 +531,54 @@ async def trigger_sage(req: SageRequest):
 
 @app.post("/api/sage/probe")
 async def create_probe(req: ProbeRequest):
+    history_limit = max(1, min(12, int(req.history_turns or 6)))
+    db.update_last_probe_turn_response(req.session_id, req.concept, req.student_response)
+    recent_turns = db.get_recent_probe_turns(req.session_id, req.concept, limit=history_limit)
+    history_block = _format_prior_conversation(recent_turns)
+
+    asked_questions = db.get_asked_questions(req.session_id, req.concept)
+    resolved_db_session_id = _resolve_db_session_id(req.session_id)
+    if resolved_db_session_id is None:
+        resolved_db_session_id = db.get_or_create_learning_session("anonymous", req.concept)
+        db.set_session_alias(req.session_id, resolved_db_session_id)
+
+    temporal_score = None
+    current = db.get_concept_score(resolved_db_session_id, req.concept) or {}
+    temporal_score = current.get("temporal_score")
+
+    response_signal = classify_student_response(req.student_response, temporal_score=temporal_score)
     probe_data = generate_probe(
         student_response=req.student_response,
         concept=req.concept,
         artifact_context=req.artifact_context,
         difficulty=req.difficulty,
+        conversation_history_block=history_block,
+        asked_questions=asked_questions,
+        max_regeneration_attempts=3,
+        response_signal=response_signal,
     )
     probe_id = db.register_probe(req.session_id, req.concept, probe_data["strategy"], probe_data["probe"])
+    db.append_asked_question(req.session_id, req.concept, probe_data["probe"])
+    db.record_probe_turn(req.session_id, req.concept, probe_data["probe"], "")
+
+    signal_to_direct = {
+        "STRUGGLING": 0.35,
+        "CONFIDENT": 0.75,
+        "UNCERTAIN": 0.4,
+        "SUSPICIOUS": 0.3,
+    }
+    exchange_count = len([t for t in recent_turns if (t.get("student_response") or "").strip()])
+    probe_depth = min(1.0, max(0.1, (exchange_count + 1) / 4.0))
+    comprehension = db.update_comprehension_score(
+        session_id=resolved_db_session_id,
+        concept=req.concept,
+        new_signal={
+            "direct_answer_score": signal_to_direct.get(str(response_signal), 0.5),
+            "probe_depth_score": probe_depth,
+            "temporal_score": 0.5 if temporal_score is None else float(temporal_score),
+            "trap_score": 0.5,
+        },
+    )
     db.log_audit_event(
         event_type="probe_generated",
         session_id=req.session_id,
@@ -475,10 +588,23 @@ async def create_probe(req: ProbeRequest):
             "difficulty": req.difficulty,
             "artifact_context": bool(req.artifact_context),
             "student_response_length": len(req.student_response or ""),
+            "response_signal": response_signal,
+            "history_turns_used": exchange_count,
         },
-        decision={"probe_id": probe_id, "strategy": probe_data["strategy"], "probe": probe_data["probe"]},
+        decision={
+            "probe_id": probe_id,
+            "strategy": probe_data["strategy"],
+            "probe": probe_data["probe"],
+            "true_comprehension": comprehension.get("true_comprehension"),
+            "status": comprehension.get("status"),
+        },
     )
-    return {"probe": probe_data["probe"], "strategy": probe_data["strategy"], "probe_id": probe_id}
+    return {
+        "probe": probe_data["probe"],
+        "strategy": probe_data["strategy"],
+        "probe_id": probe_id,
+        "response_signal": response_signal,
+    }
 
 
 @app.post("/api/sage/session-event")
@@ -602,9 +728,15 @@ async def sage_stream_endpoint(
 
 @app.post("/api/lens/verify")
 async def trigger_lens(concept: str = Form(...), file: UploadFile = File(...)):
+    mime_type = (file.content_type or "").strip().lower()
+    if mime_type not in ALLOWED_LENS_MIME_TYPES:
+        raise HTTPException(status_code=400, detail="Lens supports images (JPG, PNG, WEBP) and PDF files.")
+
     try:
         image_bytes = await file.read()
-        result = orchestrator.trigger_lens_check(image_bytes, concept)
+        if not image_bytes:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+        result = orchestrator.trigger_lens_check(image_bytes, concept, mime_type=mime_type)
         return {
             "x": result.x, "y": result.y,
             "width": result.width, "height": result.height,
@@ -613,6 +745,10 @@ async def trigger_lens(concept: str = Form(...), file: UploadFile = File(...)):
             "has_issue": result.has_issue,
             "confidence": result.confidence,
         }
+    except HTTPException:
+        raise
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

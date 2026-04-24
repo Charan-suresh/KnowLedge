@@ -39,6 +39,7 @@
     <div class="section-header">
       <h2>Concept Ledger</h2>
       <span class="tag" id="ledger-tag">0 active</span>
+      <button class="btn-ghost" onclick="refreshConceptLedger()">Refresh</button>
       <button class="btn-ghost filter-btn">Filter ▾</button>
     </div>
 
@@ -53,6 +54,9 @@
 
       <div id="ledger-body">
         <!-- Dynamically populated from API/Jinja2 -->
+      </div>
+      <div id="ledger-empty-note" style="display:none; padding: 14px 18px; color: var(--ink-muted); font-size: 13px;">
+        No concepts detected yet - try pasting more detailed content.
       </div>
     </div>
   </div>
@@ -78,7 +82,7 @@
         <span class="panel-badge vision" id="lens-model-badge">Lens · --</span>
       </div>
       <div class="camera-box">
-        <input type="file" id="lensInput" accept="image/*" onchange="simulateLens()">
+        <input type="file" id="lensInput" accept=".jpg,.jpeg,.png,.webp,.pdf" onchange="simulateLens()">
         <span style="font-size: 28px; opacity: 0.4;">📷</span>
         <p>Upload handwritten notes<br>or diagrams to verify.</p>
       </div>
@@ -146,6 +150,7 @@
 {% block scripts %}
 <script>
   const initialDebts = {{ debts_json | safe }};
+  const scoutSessionId = `scout-${Date.now()}`;
   let llmConfig = null;
   
   function renderLedger(debts) {
@@ -374,13 +379,14 @@
       const res = await fetch('/api/scout', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({text: val})
+        body: JSON.stringify({text: val, session_id: scoutSessionId, student_id: 'anonymous'})
       });
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.detail || 'Failed to tag concepts.');
       }
       window.stopColdStartTimer();
+      await refreshConceptLedger();
       await fetchState();
       if ((data.inserted || 0) > 0) {
         showToast('✅', 'Analysis complete', `${data.inserted} concept${data.inserted === 1 ? '' : 's'} added to ledger.`);
@@ -390,6 +396,22 @@
     } catch(e) {
       window.stopColdStartTimer();
       showToast('❌', 'Error', e?.message || 'Failed to tag concepts.');
+    }
+  }
+
+  async function refreshConceptLedger() {
+    const emptyNote = document.getElementById('ledger-empty-note');
+    try {
+      const res = await fetch(`/concepts/${encodeURIComponent(scoutSessionId)}`);
+      const payload = await res.json();
+      const concepts = payload?.concepts || [];
+      if (emptyNote) {
+        emptyNote.style.display = concepts.length === 0 ? 'block' : 'none';
+      }
+    } catch (e) {
+      if (emptyNote) {
+        emptyNote.style.display = 'block';
+      }
     }
   }
 
@@ -408,6 +430,9 @@
     try {
       const res = await fetch('/api/lens/verify', { method: 'POST', body: formData });
       const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.detail || 'Lens supports images (JPG, PNG, WEBP) and PDF files.');
+      }
       
         if (data.handwritten && !data.has_issue) {
           showToast('✅', 'Handwritten notes recognized', data.explanation || 'No visual logic failures detected.');
@@ -418,7 +443,7 @@
       }
       fetchState();
     } catch(e) {
-      showToast('❌', 'Lens Error', 'Failed to verify image.');
+      showToast('❌', 'Lens Error', e?.message || 'Failed to verify image.');
     }
   }
 
@@ -429,6 +454,7 @@
     console.error('Ledger render error:', e);
   }
   fetchDebtScore();
+  refreshConceptLedger();
   loadLlmConfig();
   const llmModal = document.getElementById('llmConfigModal');
   const llmCloseBtn = document.getElementById('llmCloseBtn');

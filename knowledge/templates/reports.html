@@ -96,6 +96,17 @@
     </div>
   </div>
 
+  <div class="ledger-card" style="margin-top: 18px;">
+    <h3 style="font-family: 'Playfair Display', serif; font-size: 16px; margin-bottom: 10px;">Live report snapshot</h3>
+    <div id="live-report-loading" style="font-size: 13px; color: var(--ink-muted);">Loading report...</div>
+    <div id="live-report-empty" style="display:none; font-size: 13px; color: var(--ink-muted);">No report data yet for this student.</div>
+    <div id="live-report-content" style="display:none;">
+      <div id="live-report-meta" style="font-size: 13px; color: var(--ink-muted); margin-bottom: 8px;"></div>
+      <div id="live-report-debt" style="font-size: 13px; color: var(--ink);"></div>
+      <div id="live-report-actions" style="font-size: 13px; color: var(--ink); margin-top: 8px;"></div>
+    </div>
+  </div>
+
   <!-- Concept History Table -->
   <div style="margin-top: 40px;">
     <h2 style="font-family: 'Playfair Display', serif; font-size: 17px; margin-bottom: 16px;">Full concept history</h2>
@@ -210,5 +221,56 @@
       alert('Weekly sync failed. Please retry.');
     }
   }
+
+  async function loadLiveReport() {
+    const loading = document.getElementById('live-report-loading');
+    const empty = document.getElementById('live-report-empty');
+    const content = document.getElementById('live-report-content');
+    const meta = document.getElementById('live-report-meta');
+    const debt = document.getElementById('live-report-debt');
+    const actions = document.getElementById('live-report-actions');
+
+    if (!loading || !empty || !content || !meta || !debt || !actions) {
+      return;
+    }
+
+    loading.style.display = 'block';
+    empty.style.display = 'none';
+    content.style.display = 'none';
+
+    try {
+      const res = await fetch('/reports/anonymous');
+      const data = await res.json();
+      const perConcept = data?.per_concept || [];
+      if (!perConcept.length) {
+        loading.style.display = 'none';
+        empty.style.display = 'block';
+        return;
+      }
+
+      const debtConcepts = data?.comprehension_debt || [];
+      const recs = data?.recommended_actions || [];
+      meta.textContent = `Concepts tracked: ${perConcept.length} · Temporal anomalies: ${data?.temporal_anomaly_count || 0}`;
+      debt.textContent = debtConcepts.length
+        ? `Debt concepts: ${debtConcepts.map(x => `${x.concept} (${Number(x.comprehension_score).toFixed(2)})`).join(', ')}`
+        : 'Debt concepts: none';
+      actions.textContent = recs.length
+        ? `Recommended actions: ${recs.map(x => x.recommendation).join(' | ')}`
+        : 'Recommended actions: keep practicing verified concepts.';
+
+      loading.style.display = 'none';
+      content.style.display = 'block';
+    } catch (e) {
+      loading.style.display = 'none';
+      empty.style.display = 'block';
+    }
+  }
+
+  loadLiveReport();
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      loadLiveReport();
+    }
+  });
 </script>
 {% endblock %}

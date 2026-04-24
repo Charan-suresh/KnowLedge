@@ -97,6 +97,24 @@
   </div>
 </div>
 
+<div class="ledger-card" style="margin-top: 28px; padding: 0;">
+  <div class="panel-header" style="padding: 18px 22px; border-bottom: 1px solid var(--rule);">
+    <h2 style="font-family: 'Playfair Display', serif; font-size: 17px;">Student comprehension by concept</h2>
+    <span class="tag">0.0 - 1.0 scale</span>
+  </div>
+  <div id="student-progress-skeleton" style="padding: 18px 22px; display: block;">
+    <div style="height: 12px; background: var(--cream-deep); border-radius: 6px; margin-bottom: 10px;"></div>
+    <div style="height: 12px; background: var(--cream-deep); border-radius: 6px; margin-bottom: 10px;"></div>
+    <div style="height: 12px; background: var(--cream-deep); border-radius: 6px;"></div>
+  </div>
+  <div id="student-progress-empty" style="display: none; padding: 16px 22px; color: var(--ink-muted);">
+    Start a session with Sage to see your progress here
+  </div>
+  <div id="student-progress-chart-wrap" style="padding: 0 20px 20px; display: none;">
+    <canvas id="studentProgressChart" style="max-height: 260px;"></canvas>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -252,5 +270,65 @@
     barChart.data.datasets[0].data = data.velocity.map(d => d.cleared_count);
     barChart.update();
   }
+
+  let studentProgressChart = null;
+  async function loadStudentProgress() {
+    const skeleton = document.getElementById('student-progress-skeleton');
+    const empty = document.getElementById('student-progress-empty');
+    const wrap = document.getElementById('student-progress-chart-wrap');
+    try {
+      const res = await fetch('/progress/anonymous');
+      const data = await res.json();
+      const concepts = data?.concepts || [];
+
+      if (skeleton) skeleton.style.display = 'none';
+      if (!concepts.length) {
+        if (empty) empty.style.display = 'block';
+        if (wrap) wrap.style.display = 'none';
+        return;
+      }
+
+      if (empty) empty.style.display = 'none';
+      if (wrap) wrap.style.display = 'block';
+
+      const ctx = document.getElementById('studentProgressChart').getContext('2d');
+      if (studentProgressChart) {
+        studentProgressChart.destroy();
+      }
+      studentProgressChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: concepts.map(c => c.concept),
+          datasets: [{
+            data: concepts.map(c => c.true_comprehension),
+            backgroundColor: teal,
+            borderRadius: 4,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { grid: { display: false } },
+            y: { min: 0, max: 1, grid: { color: rule } }
+          },
+          plugins: {
+            tooltip: {
+              backgroundColor: ink,
+              callbacks: { label: (ctx) => `Score: ${Number(ctx.raw).toFixed(2)}` }
+            }
+          }
+        }
+      });
+    } catch (e) {
+      if (skeleton) skeleton.style.display = 'none';
+      if (empty) {
+        empty.style.display = 'block';
+        empty.textContent = 'Start a session with Sage to see your progress here';
+      }
+    }
+  }
+
+  loadStudentProgress();
 </script>
 {% endblock %}

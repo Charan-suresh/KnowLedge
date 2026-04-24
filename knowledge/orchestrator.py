@@ -12,7 +12,7 @@ from . import db
 from . import config
 from .scout import tag_content
 from .sage import run_session, ClearingResult
-from .lens import verify_image, ExaminerResult
+from .lens import verify_document, ExaminerResult
 from .integrity.session_fingerprint import build_session_fingerprint, sign_fingerprint
 from .integrity.anti_spoof import analyze_integrity, make_lens_signature
 from .prompt_engineering import generate_solo_question
@@ -180,7 +180,7 @@ class Orchestrator:
             if config.LOW_RAM:
                 self.resource_lock.release()
 
-    def trigger_lens_check(self, image_bytes: bytes, concept: str) -> ExaminerResult:
+    def trigger_lens_check(self, image_bytes: bytes, concept: str, mime_type: str = "image/png") -> ExaminerResult:
         """
         Calls Lens, returns result to caller, logs outcome.
         """
@@ -188,7 +188,7 @@ class Orchestrator:
             self.resource_lock.acquire()
 
         try:
-            result = verify_image(image_bytes, concept)
+            result = verify_document(image_bytes, concept, mime_type)
             
             # Persist handwritten verification only when the model actually recognized handwriting
             # or found a concrete issue worth carrying into the ledger.
