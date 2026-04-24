@@ -789,7 +789,7 @@ async def verify_diagram(
         messages=[
             {
                 "role": "user",
-                "content": [{"type": "text", "text": prompt}],
+                "content": prompt,
                 "images": [image_b64],
             }
         ],
@@ -797,9 +797,10 @@ async def verify_diagram(
     )
     content = (model_response.get("message", {}) or {}).get("content", "")
 
-    try:
-        parsed = json.loads(content)
-    except Exception:
+    from .lens import _parse_json_payload
+    parsed = _parse_json_payload(content)
+    if not parsed:
+        logger.error("verify_diagram: failed to parse model response: %s", content[:300])
         parsed = {
             "verified": False,
             "elements_found": [],

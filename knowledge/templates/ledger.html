@@ -408,6 +408,32 @@
       if (emptyNote) {
         emptyNote.style.display = concepts.length === 0 ? 'block' : 'none';
       }
+      // Render concept scores into ledger body if present (supplements debt_log view)
+      if (concepts.length > 0) {
+        const tbody = document.getElementById('ledger-body');
+        // Only inject concept score rows that aren't already shown from debt_log
+        const existingConcepts = new Set(
+          Array.from(tbody.querySelectorAll('.concept-cell h3')).map(el => el.textContent.trim().toLowerCase())
+        );
+        concepts.forEach(c => {
+          if (!existingConcepts.has((c.concept || '').toLowerCase())) {
+            const score = c.true_comprehension != null ? Math.round(c.true_comprehension * 100) : null;
+            const statusLabel = c.status === 'pending' ? 'On Loan' : (c.status || 'On Loan');
+            const pillClass = c.status === 'verified' ? 'teal' : (c.status === 'live_session_required' ? 'coral' : 'amber');
+            const conceptEncoded = encodeURIComponent(c.concept || '');
+            tbody.innerHTML += `
+              <div class="ledger-grid ledger-row" onclick="openModal(decodeURIComponent('${conceptEncoded}'))">
+                <div class="concept-cell"><h3>${c.concept}</h3><p>${c.raw_content_snippet ? c.raw_content_snippet.substring(0,40)+'...' : ''}</p></div>
+                <div><span class="pill ${pillClass}">${statusLabel}</span></div>
+                <div>
+                  ${score != null ? `<div class="conf-track"><div class="conf-fill" style="width:${score}%;"></div></div><div class="conf-label">${score}%</div>` : '<span style="color:var(--ink-muted);font-size:12px;">pending</span>'}
+                </div>
+                <div class="date-cell">—</div>
+                <div><button class="action-btn" aria-label="Open session">→</button></div>
+              </div>`;
+          }
+        });
+      }
     } catch (e) {
       if (emptyNote) {
         emptyNote.style.display = 'block';
