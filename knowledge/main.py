@@ -280,19 +280,10 @@ async def read_help(request: Request):
 
 @app.get("/health")
 async def health():
-    backend = await get_health_status()
     return {
         "status": "ok",
         "environment": config.ENVIRONMENT,
         "inference_backend": config.INFERENCE_BACKEND,
-        "backend_reachable": backend.get("reachable", False),
-        "backend_error": backend.get("error"),
-        "backend_base_url": backend.get("base_url"),
-        "backend_response": backend.get("response"),
-        "hf_space_url": config.HF_SPACE_URL if config.INFERENCE_BACKEND == "hf_space" else None,
-        "build_commit": config.BUILD_COMMIT or None,
-        "build_branch": config.BUILD_BRANCH or None,
-        "render_service_name": config.RENDER_SERVICE_NAME or None,
     }
 
 

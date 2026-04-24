@@ -1,4 +1,3 @@
-import sys
 import os
 import logging
 from typing import List, Dict, Any, Optional
@@ -8,14 +7,15 @@ try:
     import chromadb
     from chromadb.utils import embedding_functions
 except ImportError:
-    print("Please install chromadb: pip install chromadb")
-    sys.exit(1)
+    chromadb = None
+    embedding_functions = None
+    print("chromadb not available — RAG disabled")
 
 try:
     import pdfplumber
 except ImportError:
-    print("Please install pdfplumber: pip install pdfplumber")
-    sys.exit(1)
+    pdfplumber = None
+    print("pdfplumber not available — PDF ingestion disabled")
 
 
 _collection = None
@@ -36,15 +36,14 @@ def _ollama_embeddings_expected() -> bool:
     return config.OLLAMA_BASE_URL != config.DEFAULT_OLLAMA_BASE_URL or config.INFERENCE_BACKEND == "ollama"
 
 
-def init_vectorstore() -> Optional[chromadb.Collection]:
-    """
-    Initializes and returns the ChromaDB persistent collection.
-    Uses local Ollama for generating embeddings.
-    """
+def init_vectorstore() -> Optional["chromadb.Collection"]:
     global _collection, _vectorstore_disabled
     if _collection is not None:
         return _collection
     if _vectorstore_disabled:
+        return None
+    if chromadb is None or embedding_functions is None:
+        _disable_vectorstore("chromadb not installed")
         return None
 
     if not _ollama_embeddings_expected():
@@ -94,6 +93,9 @@ def extract_text_from_file(file_path: str) -> str:
             return ""
             
     elif ext == ".pdf":
+        if pdfplumber is None:
+            print("pdfplumber not installed — cannot read PDF")
+            return ""
         text_pieces = []
         try:
             with pdfplumber.open(file_path) as pdf:
