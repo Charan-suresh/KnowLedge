@@ -117,20 +117,29 @@ def _select_vision_model() -> str:
 def _vision_chat_json(prompt: str, image_b64: str, model_name: str) -> dict:
     clean_b64 = _strip_data_uri_prefix(image_b64)
     if config.INFERENCE_BACKEND == "ollama":
+        # Use /api/chat with images in the message — correct path for Gemma 4 vision
         payload = {
             "model": model_name,
-            "prompt": prompt,
-            "images": [clean_b64],
+            "messages": [{
+                "role": "user",
+                "content": prompt,
+                "images": [clean_b64],
+            }],
             "stream": False,
+            "think": False,
+            "options": {"num_predict": 1024, "temperature": 0.2},
         }
-        url = f"{config.OLLAMA_BASE_URL}/api/generate"
+        url = f"{config.OLLAMA_BASE_URL}/api/chat"
         try:
             with httpx.Client(timeout=180.0) as client:
                 response = client.post(url, json=payload, headers=_ollama_headers())
                 if response.status_code >= 400:
                     logger.error("Lens Ollama failure status=%s body=%s", response.status_code, response.text)
                     response.raise_for_status()
-                return response.json()
+                raw = response.json()
+                # Normalise /api/chat response to match expected {"response": ...} shape
+                content = (raw.get("message") or {}).get("content", "") or ""
+                return {"response": content}
         except Exception:
             logger.exception("Lens Ollama vision request failed; falling back to chat interface")
 

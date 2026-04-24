@@ -194,7 +194,8 @@ def tag_content(text: str) -> List[ConceptTag]:
                 {'role': 'system', 'content': SYSTEM_PROMPT},
                 {'role': 'user', 'content': f"Analyze this student input:\n\n{text}"}
             ],
-            tools=tools
+            tools=tools,
+            num_predict=256,
         )
 
         return _extract_concepts_from_response(response, text)

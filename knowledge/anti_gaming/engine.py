@@ -281,6 +281,7 @@ def generate_probe(
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
+            num_predict=128,
         )
         question = (response.get("message", {}) or {}).get("content", "").strip()
         if not question:

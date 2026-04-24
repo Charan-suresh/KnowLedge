@@ -69,9 +69,15 @@ async def list_models() -> List[str]:
         return [m.get("name", "") for m in response.json().get("models", []) if m.get("name")]
 
 
-def chat(model: str, messages: List[Dict[str, Any]], tools: List[Dict[str, Any]] | None = None, format: str | None = None) -> Dict[str, Any]:
+def chat(model: str, messages: List[Dict[str, Any]], tools: List[Dict[str, Any]] | None = None, format: str | None = None, num_predict: int = 512) -> Dict[str, Any]:
     """Synchronous /api/chat helper for non-async call sites."""
-    payload: Dict[str, Any] = {"model": model, "messages": messages, "stream": False}
+    payload: Dict[str, Any] = {
+        "model": model,
+        "messages": messages,
+        "stream": False,
+        "think": False,
+        "options": {"num_predict": num_predict, "temperature": 0.7},
+    }
     if tools:
         payload["tools"] = tools
     if format:
@@ -85,7 +91,13 @@ def chat(model: str, messages: List[Dict[str, Any]], tools: List[Dict[str, Any]]
 
 async def chat_async(model: str, messages: List[Dict[str, Any]], tools: List[Dict[str, Any]] | None = None, format: str | None = None) -> Dict[str, Any]:
     """Async /api/chat helper for non-streaming responses."""
-    payload: Dict[str, Any] = {"model": model, "messages": messages, "stream": False}
+    payload: Dict[str, Any] = {
+        "model": model,
+        "messages": messages,
+        "stream": False,
+        "think": False,
+        "options": {"num_predict": 512, "temperature": 0.7},
+    }
     if tools:
         payload["tools"] = tools
     if format:
@@ -99,7 +111,13 @@ async def chat_async(model: str, messages: List[Dict[str, Any]], tools: List[Dic
 
 async def stream_chat(model: str, messages: List[Dict[str, Any]]) -> AsyncGenerator[Dict[str, Any], None]:
     """Async streaming /api/chat helper yielding JSON chunks."""
-    payload = {"model": model, "messages": messages, "stream": True}
+    payload = {
+        "model": model,
+        "messages": messages,
+        "stream": True,
+        "think": False,
+        "options": {"num_predict": 512, "temperature": 0.7},
+    }
     async with httpx.AsyncClient(timeout=180.0) as client:
         async with client.stream("POST", f"{OLLAMA_BASE_URL}/api/chat", json=payload, headers=_headers()) as response:
             response.raise_for_status()
