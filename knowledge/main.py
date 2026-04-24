@@ -97,8 +97,12 @@ async def warm_ollama() -> None:
 async def _periodic_sync_worker():
     while True:
         try:
-            send_weekly_payload()
-            retry_pending_sync()
+            await asyncio.get_event_loop().run_in_executor(
+                None, send_weekly_payload
+            )
+            await asyncio.get_event_loop().run_in_executor(
+                None, retry_pending_sync
+            )
         except Exception as e:
             logger.error("[sync] periodic sync failed: %s", e)
         await asyncio.sleep(6 * 60 * 60)
@@ -140,13 +144,22 @@ async def lifespan(app_instance: FastAPI):
     if config.DEMO_MODE:
         db.seed_demo_data_if_empty()
     config.load_runtime_llm_config(db.get_llm_settings())
-    asyncio.create_task(warm_ollama())
-    await _sweep_overdue_sessions()
+    # All heavy work deferred to background tasks so the port is
+    # immediately available for Render's port scanner / health check.
+    async def _deferred_startup():
+        await asyncio.sleep(2)  # let the server fully bind first
+        try:
+            await _sweep_overdue_sessions()
+        except Exception as exc:
+            logger.warning("[startup] sweep failed: %s", exc)
+        asyncio.create_task(warm_ollama())
+        orchestrator.start_scout_loop()
+
     app_instance.state.sync_task = asyncio.create_task(_periodic_sync_worker())
     app_instance.state.orchestrator = orchestrator
-    orchestrator.start_scout_loop()
+    asyncio.create_task(_deferred_startup())
     yield
-    # ── Shutdown (nothing to clean up yet) ───────────────────────────────────
+    # ── Shutdown ─────────────────────────────────────────────────────────────
     task = getattr(app_instance.state, "sync_task", None)
     if task:
         task.cancel()
@@ -168,10 +181,6 @@ app.include_router(classroom_router)
 
 # Orchestrator (starts Scout background loop)
 orchestrator = Orchestrator()
-
-# Ensure schema exists even when app lifespan isn't entered (e.g., raw TestClient usage).
-db.init_db()
-db.run_migrations()
 
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
