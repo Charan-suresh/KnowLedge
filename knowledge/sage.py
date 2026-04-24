@@ -16,20 +16,30 @@ _ROLE_TAG_RE = re.compile(r"\*\*\[(SYSTEM|USER|ASSISTANT)\]\*\*|\[(SYSTEM|USER|A
 def _normalize_socratic_response(reply: str) -> str:
     cleaned = _ROLE_TAG_RE.sub("", reply or "")
     cleaned = cleaned.replace("Assistant:", "").replace("User:", "").replace("System instructions:", "")
-    cleaned = " ".join(cleaned.split())
+    cleaned = " ".join(cleaned.split()).strip()
 
     if not cleaned:
         return "Can you explain that in your own words, step by step?"
-
     if "CLEARED" in cleaned.upper():
         return "CLEARED"
 
-    for part in re.split(r"(?<=[?.!])\s+", cleaned):
-        segment = part.strip()
-        if segment.endswith("?") and len(segment) > 8:
-            return segment
+    sentences = re.split(r"(?<=[?.!])\s+", cleaned)
+    explanation_parts = []
+    question = ""
+    for s in sentences:
+        s = s.strip()
+        if not s:
+            continue
+        if s.endswith("?") and len(s) > 8 and not question:
+            question = s
+        elif not question:
+            explanation_parts.append(s)
 
-    return "Can you explain that in your own words, step by step?"
+    if not question:
+        return cleaned
+    if explanation_parts:
+        return " ".join(explanation_parts) + "\n\n" + question
+    return question
 
 def _build_history_block(chat_history: List[Dict[str, str]]) -> str:
     """Format last N turns as a [PRIOR CONVERSATION] block for injection."""
@@ -73,15 +83,21 @@ def run_session(concept: str, debt_log: List[Dict[str, Any]], chat_history: List
         if history_block else ""
     )
 
-    system_prompt = f"""You are the Debt Collector. Your goal is to clear comprehension debt for heavily borrowed concept: '{concept}'. 
-Use the provided context to ask questions that lead the student to the answer. 
-If they are wrong, point out why their logic is inconsistent based on the Context. 
-Never give the answer directly.
-If you determine the student has demonstrated sufficient understanding and has "cleared" the concept, you MUST call the `verify_comprehension` tool.
+    system_prompt = f"""You are Sage, a Socratic tutor. The student is working on: '{concept}'.
+For each turn, structure your response in exactly two parts:
+1. A brief explanation (1-2 sentences) that clarifies or acknowledges the concept being discussed.
+2. One focused probing question that tests a NEW aspect the student has not yet addressed.
+
+Format: <explanation>\n\n<question>
 
 Context:
 {context_str}
-{history_block}{no_repeat_instruction}"""
+{history_block}{no_repeat_instruction}
+Rules:
+- Never repeat or rephrase a question already asked.
+- Never give the full answer away.
+- If the student demonstrates clear, genuine understanding, call the `verify_comprehension` tool.
+- Keep each response under 60 words total."""
 
     messages = [{"role": "system", "content": system_prompt}] + chat_history
 

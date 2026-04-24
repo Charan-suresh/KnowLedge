@@ -83,13 +83,72 @@ def _enforce_socratic_question(reply: str) -> str:
     return "What do you know about this concept? Can you give me an example?"
 
 
-def _build_system_prompt(concept: str, debt_entries: list) -> str:
+def _build_history_block(chat_history: list[dict]) -> str:
+    """Format prior turns as [PRIOR CONVERSATION] block."""
+    turns = []
+    idx = 1
+    i = 0
+    while i < len(chat_history) - 1:
+        msg, nxt = chat_history[i], chat_history[i + 1]
+        role = (msg.get("role") or "").lower()
+        nxt_role = (nxt.get("role") or "").lower()
+        if role in {"assistant", "sage"} and nxt_role in {"user", "student"}:
+            q = (msg.get("content") or "").strip()
+            a = (nxt.get("content") or "").strip()
+            if q and a:
+                turns.append(f"Turn {idx} - Sage: {q}")
+                turns.append(f"Turn {idx} - Student: {a}")
+                idx += 1
+            i += 2
+        else:
+            i += 1
+    if not turns:
+        return ""
+    return "[PRIOR CONVERSATION]\n" + "\n".join(turns) + "\n[END PRIOR CONVERSATION]"
+
+
+def _format_sage_response(reply: str) -> str:
+    """
+    Formats Sage's raw reply into:
+      <concept explanation sentence(s)>\n\n<one probing question>
+    Falls back gracefully if the model only returns a question.
+    """
+    cleaned = _ROLE_TAG_RE.sub("", (reply or ""))
+    cleaned = cleaned.replace("Assistant:", "").replace("User:", "").replace("System instructions:", "")
+    cleaned = " ".join(cleaned.split()).strip()
+
+    if not cleaned:
+        return "Can you explain that in your own words, step by step?"
+    if "CLEARED" in cleaned.upper():
+        return "CLEARED"
+
+    sentences = re.split(r"(?<=[?.!])\s+", cleaned)
+    explanation_parts = []
+    question = ""
+
+    for s in sentences:
+        s = s.strip()
+        if not s:
+            continue
+        if s.endswith("?") and len(s) > 8 and not question:
+            question = s
+        elif not question:
+            explanation_parts.append(s)
+
+    if not question:
+        return cleaned  # model returned only explanation — return as-is
+
+    if explanation_parts:
+        return " ".join(explanation_parts) + "\n\n" + question
+    return question
+
+
+def _build_system_prompt(concept: str, debt_entries: list, history_block: str = "") -> str:
     """
     Builds Sage's system prompt with two context sources:
       1. Curriculum context — top-k chunks from the US Curriculum Guide vectorstore
       2. Student notes context — the student's own source_text from debt_log
     """
-    # ── 1. Curriculum RAG context ──────────────────────────────────────────────
     curriculum_context = ""
     if RAG_AVAILABLE:
         try:
@@ -97,33 +156,37 @@ def _build_system_prompt(concept: str, debt_entries: list) -> str:
         except Exception:
             curriculum_context = ""
 
-    # ── 2. Student debt entries ────────────────────────────────────────────────
     student_notes = "\n".join(
         [f"- {e['source_text'][:150]}" for e in debt_entries[:3] if e.get("source_text")]
     )
 
     curriculum_block = (
-        f"\nCurriculum reference (US Curriculum Guide):\n{curriculum_context}\n"
-        if curriculum_context.strip()
-        else ""
+        f"\nCurriculum reference:\n{curriculum_context}\n"
+        if curriculum_context.strip() else ""
     )
     notes_block = (
         f"\nStudent's prior notes:\n{student_notes}\n"
-        if student_notes.strip()
-        else ""
+        if student_notes.strip() else ""
+    )
+    no_repeat = (
+        f"\n{history_block}\nYou have already asked the questions above. "
+        "Do NOT repeat or rephrase any of them. Your next response must probe a NEW aspect.\n"
+        if history_block else ""
     )
 
-    return f"""You are Sage, a Socratic tutor embedded inside a Google Classroom assignment. \
-Your only job is to ask probing questions — never explain the answer yourself.
+    return f"""You are Sage, a Socratic tutor. The student is working on: "{concept}".
+{curriculum_block}{notes_block}{no_repeat}
+For each turn, structure your response in exactly two parts:
+1. A brief explanation (1-2 sentences) that clarifies or acknowledges the concept being discussed.
+2. One focused probing question that tests a NEW aspect the student has not yet addressed.
 
-The student needs to demonstrate genuine understanding of: "{concept}".
-{curriculum_block}{notes_block}
+Format: <explanation>\n\n<question>
+
 Rules:
-- Ask exactly ONE focused question per turn.
-- If the student's answer is vague or uses jargon without explanation, probe deeper with a follow-up.
-- If they demonstrate clear, genuine understanding in their own words, respond with exactly: CLEARED
-- Never give the answer away. Only ask questions.
-- Keep questions grounded in the curriculum context above when available."""
+- Never repeat or rephrase a question already asked.
+- Never give the full answer away.
+- If the student demonstrates clear, genuine understanding across all key aspects, respond with exactly: CLEARED
+- Keep each response under 60 words total."""
 
 
 async def run_sage_ollama(
@@ -145,40 +208,38 @@ async def run_sage_ollama(
         concept = (session or {}).get("assignment_id", "the concept")
 
     debt_entries = db.get_debt_by_concept(concept)
-    system_prompt = _build_system_prompt(concept, debt_entries)
+    history_block = _build_history_block(chat_history[-12:])
+    system_prompt = _build_system_prompt(concept, debt_entries, history_block)
     messages = [{"role": "system", "content": system_prompt}] + chat_history
 
     full_reply = ""
-    emitted_question = False
+    emitted = False
     try:
         async for chunk in stream_chat(model=config.SAGE_MODEL, messages=messages):
             token = chunk.get("message", {}).get("content", "")
             full_reply += token
-
-            if emitted_question:
+            if emitted:
                 continue
-
-            # Emit early as soon as we can confidently form one focused question.
-            normalized = _enforce_socratic_question(full_reply)
-            if normalized == "CLEARED":
+            # Wait for a complete response (explanation + question) before emitting
+            formatted = _format_sage_response(full_reply)
+            if formatted == "CLEARED":
                 yield "CLEARED"
                 yield "\n__CLEARED__"
                 return
+            # Emit once we have at least one complete sentence ending with ?
+            if "?" in formatted and formatted.strip().endswith("?"):
+                yield formatted
+                emitted = True
 
-            if normalized.endswith("?") and len(normalized) > 8:
-                yield normalized
-                emitted_question = True
-
-        if not emitted_question:
-            normalized = _enforce_socratic_question(full_reply)
-            if normalized == "CLEARED":
+        if not emitted:
+            formatted = _format_sage_response(full_reply)
+            if formatted == "CLEARED":
                 yield "CLEARED"
                 yield "\n__CLEARED__"
                 return
-            if normalized:
-                yield normalized
+            if formatted:
+                yield formatted
 
-        # Signal clearing to the SSE wrapper
         if "CLEARED" in full_reply.upper():
             yield "\n__CLEARED__"
 
