@@ -107,39 +107,50 @@ def _build_history_block(chat_history: list[dict]) -> str:
     return "[PRIOR CONVERSATION]\n" + "\n".join(turns) + "\n[END PRIOR CONVERSATION]"
 
 
+def _clean_reply(reply: str) -> str:
+    """Strip role tags, XML-like format tags, and normalize whitespace."""
+    cleaned = _ROLE_TAG_RE.sub("", (reply or ""))
+    # Strip any literal format tags the model may have output
+    cleaned = re.sub(r"</?(?:explanation|question|answer|response)>", "", cleaned, flags=re.IGNORECASE)
+    cleaned = cleaned.replace("Assistant:", "").replace("User:", "").replace("System instructions:", "")
+    # Collapse runs of whitespace but preserve single newlines between sentences
+    cleaned = re.sub(r" {2,}", " ", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
 def _format_sage_response(reply: str) -> str:
     """
-    Formats Sage's raw reply into:
-      <concept explanation sentence(s)>\n\n<one probing question>
-    Falls back gracefully if the model only returns a question.
+    Parses Sage's raw reply into: <explanation>\n\n<question>
+    The model is NOT told to use tags — we split on the last sentence
+    ending with '?' and treat everything before it as the explanation.
     """
-    cleaned = _ROLE_TAG_RE.sub("", (reply or ""))
-    cleaned = cleaned.replace("Assistant:", "").replace("User:", "").replace("System instructions:", "")
-    cleaned = " ".join(cleaned.split()).strip()
+    cleaned = _clean_reply(reply)
 
     if not cleaned:
-        return "Can you explain that in your own words, step by step?"
+        return "Can you walk me through one concrete example of this concept?"
     if "CLEARED" in cleaned.upper():
         return "CLEARED"
 
-    sentences = re.split(r"(?<=[?.!])\s+", cleaned)
-    explanation_parts = []
-    question = ""
+    # Split into sentences preserving structure
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", cleaned) if s.strip()]
 
-    for s in sentences:
-        s = s.strip()
-        if not s:
-            continue
-        if s.endswith("?") and len(s) > 8 and not question:
-            question = s
-        elif not question:
-            explanation_parts.append(s)
+    # Find the LAST question sentence — that's the probe
+    question_idx = None
+    for i in range(len(sentences) - 1, -1, -1):
+        if sentences[i].endswith("?") and len(sentences[i]) > 8:
+            question_idx = i
+            break
 
-    if not question:
-        return cleaned  # model returned only explanation — return as-is
+    if question_idx is None:
+        # No question found — return as-is (model may have given explanation only)
+        return cleaned
 
-    if explanation_parts:
-        return " ".join(explanation_parts) + "\n\n" + question
+    explanation = " ".join(sentences[:question_idx]).strip()
+    question = sentences[question_idx]
+
+    if explanation:
+        return explanation + "\n\n" + question
     return question
 
 
@@ -176,17 +187,15 @@ def _build_system_prompt(concept: str, debt_entries: list, history_block: str = 
 
     return f"""You are Sage, a Socratic tutor. The student is working on: "{concept}".
 {curriculum_block}{notes_block}{no_repeat}
-For each turn, structure your response in exactly two parts:
-1. A brief explanation (1-2 sentences) that clarifies or acknowledges the concept being discussed.
-2. One focused probing question that tests a NEW aspect the student has not yet addressed.
-
-Format: <explanation>\n\n<question>
+Each response must do two things in order:
+- First, acknowledge or briefly clarify what the student said (1 sentence).
+- Then, ask exactly one focused follow-up question probing a new aspect.
 
 Rules:
 - Never repeat or rephrase a question already asked.
-- Never give the full answer away.
-- If the student demonstrates clear, genuine understanding across all key aspects, respond with exactly: CLEARED
-- Keep each response under 60 words total."""
+- Never reveal the full answer.
+- If the student has clearly demonstrated genuine understanding of all key aspects, respond with only the word: CLEARED
+- Keep the total response under 50 words."""
 
 
 async def run_sage_ollama(

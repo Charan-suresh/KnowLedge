@@ -11,34 +11,35 @@ class ClearingResult:
 
 
 _ROLE_TAG_RE = re.compile(r"\*\*\[(SYSTEM|USER|ASSISTANT)\]\*\*|\[(SYSTEM|USER|ASSISTANT)\]", re.IGNORECASE)
+_FORMAT_TAG_RE = re.compile(r"</?(?:explanation|question|answer|response)>", re.IGNORECASE)
 
 
 def _normalize_socratic_response(reply: str) -> str:
     cleaned = _ROLE_TAG_RE.sub("", reply or "")
+    cleaned = _FORMAT_TAG_RE.sub("", cleaned)
     cleaned = cleaned.replace("Assistant:", "").replace("User:", "").replace("System instructions:", "")
-    cleaned = " ".join(cleaned.split()).strip()
+    cleaned = re.sub(r" {2,}", " ", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
 
     if not cleaned:
-        return "Can you explain that in your own words, step by step?"
+        return "Can you walk me through one concrete example of this concept?"
     if "CLEARED" in cleaned.upper():
         return "CLEARED"
 
-    sentences = re.split(r"(?<=[?.!])\s+", cleaned)
-    explanation_parts = []
-    question = ""
-    for s in sentences:
-        s = s.strip()
-        if not s:
-            continue
-        if s.endswith("?") and len(s) > 8 and not question:
-            question = s
-        elif not question:
-            explanation_parts.append(s)
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", cleaned) if s.strip()]
+    question_idx = None
+    for i in range(len(sentences) - 1, -1, -1):
+        if sentences[i].endswith("?") and len(sentences[i]) > 8:
+            question_idx = i
+            break
 
-    if not question:
+    if question_idx is None:
         return cleaned
-    if explanation_parts:
-        return " ".join(explanation_parts) + "\n\n" + question
+
+    explanation = " ".join(sentences[:question_idx]).strip()
+    question = sentences[question_idx]
+    if explanation:
+        return explanation + "\n\n" + question
     return question
 
 def _build_history_block(chat_history: List[Dict[str, str]]) -> str:
@@ -84,20 +85,18 @@ def run_session(concept: str, debt_log: List[Dict[str, Any]], chat_history: List
     )
 
     system_prompt = f"""You are Sage, a Socratic tutor. The student is working on: '{concept}'.
-For each turn, structure your response in exactly two parts:
-1. A brief explanation (1-2 sentences) that clarifies or acknowledges the concept being discussed.
-2. One focused probing question that tests a NEW aspect the student has not yet addressed.
-
-Format: <explanation>\n\n<question>
-
 Context:
 {context_str}
 {history_block}{no_repeat_instruction}
+Each response must do two things in order:
+- Acknowledge or briefly clarify what the student said (1 sentence).
+- Ask exactly one focused follow-up question probing a new aspect.
+
 Rules:
 - Never repeat or rephrase a question already asked.
-- Never give the full answer away.
-- If the student demonstrates clear, genuine understanding, call the `verify_comprehension` tool.
-- Keep each response under 60 words total."""
+- Never reveal the full answer.
+- If the student has clearly demonstrated genuine understanding of all key aspects, call the `verify_comprehension` tool.
+- Keep the total response under 50 words."""
 
     messages = [{"role": "system", "content": system_prompt}] + chat_history
 
