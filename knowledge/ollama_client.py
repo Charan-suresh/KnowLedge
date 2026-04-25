@@ -16,6 +16,10 @@ MODEL_PREFERENCE = [
 _resolved_model: Optional[str] = None
 
 
+def _normalize_base_url(base_url: Optional[str] = None) -> str:
+    return (base_url or config.OLLAMA_BASE_URL or OLLAMA_BASE).rstrip("/")
+
+
 def _headers() -> dict[str, str]:
     headers = {}
     if config.OLLAMA_AUTH_TOKEN:
@@ -25,6 +29,7 @@ def _headers() -> dict[str, str]:
 
 def resolve_model(base_url: str = OLLAMA_BASE) -> Optional[str]:
     global _resolved_model
+    base_url = _normalize_base_url(base_url)
     try:
         response = httpx.get(f"{base_url}/api/tags", timeout=5.0, headers=_headers())
         available = [model["name"] for model in response.json().get("models", [])]
@@ -42,6 +47,7 @@ def resolve_model(base_url: str = OLLAMA_BASE) -> Optional[str]:
 
 
 def get_model(base_url: str = OLLAMA_BASE) -> str:
+    base_url = _normalize_base_url(base_url)
     return _resolved_model or resolve_model(base_url) or "gemma4:e4b"
 
 
@@ -52,6 +58,7 @@ def chat(
     images: list[str] | None = None,
     temperature: float = 0.7,
 ) -> str:
+    base_url = _normalize_base_url(base_url)
     model = get_model(base_url)
     payload = {
         "model": model,
@@ -98,6 +105,7 @@ def extract_json(text: str) -> dict | list:
 
 
 def is_ready(base_url: str = OLLAMA_BASE) -> dict:
+    base_url = _normalize_base_url(base_url)
     try:
         response = httpx.get(f"{base_url}/api/tags", timeout=3.0, headers=_headers())
         models = [model["name"] for model in response.json().get("models", [])]
@@ -107,6 +115,7 @@ def is_ready(base_url: str = OLLAMA_BASE) -> dict:
             "model": model or "none",
             "all_models": models,
             "ollama_running": True,
+            "ollama_url": base_url,
         }
     except Exception:
         return {
@@ -114,4 +123,5 @@ def is_ready(base_url: str = OLLAMA_BASE) -> dict:
             "model": None,
             "all_models": [],
             "ollama_running": False,
+            "ollama_url": base_url,
         }

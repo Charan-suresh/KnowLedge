@@ -156,6 +156,20 @@
     let currentSageConcept = "";
     let currentSageHistory = [];
 
+    function isLocalOllamaUrl(url) {
+      try {
+        const parsed = new URL(url);
+        return ["localhost", "127.0.0.1"].includes(parsed.hostname);
+      } catch (e) {
+        return false;
+      }
+    }
+
+    function preferHostedDefault(storedUrl) {
+      const isHostedOrigin = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
+      return isHostedOrigin && isLocalOllamaUrl(storedUrl) && !isLocalOllamaUrl(DEFAULT_OLLAMA_URL);
+    }
+
     function getCookie(name) {
       const value = `; ${document.cookie}`;
       const parts = value.split(`; ${name}=`);
@@ -176,8 +190,12 @@
     }
 
     function getLLMConfig() {
+      const storedUrl = localStorage.getItem("ollama_url");
+      if (storedUrl && !preferHostedDefault(storedUrl)) {
+        return { ollama_url: storedUrl };
+      }
       return {
-        ollama_url: localStorage.getItem("ollama_url") || DEFAULT_OLLAMA_URL,
+        ollama_url: DEFAULT_OLLAMA_URL,
       };
     }
 
@@ -259,6 +277,9 @@
         } else {
           statusText.textContent = "Compatible model not found";
           dot.classList.remove("ready");
+        }
+        if (data.ollama_url && preferHostedDefault(localStorage.getItem("ollama_url") || "")) {
+          localStorage.removeItem("ollama_url");
         }
       } catch (e) {
         document.getElementById("navStatusText").textContent = "Status unavailable";

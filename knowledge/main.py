@@ -115,8 +115,8 @@ def health():
 
 
 @app.get("/api/status")
-def status(ollama_url: str = Query(DEFAULT_OLLAMA_URL)):
-    return ollama_client.is_ready(ollama_url)
+def status(ollama_url: str | None = Query(None)):
+    return ollama_client.is_ready(ollama_url or DEFAULT_OLLAMA_URL)
 
 
 @app.get("/api/concepts")
