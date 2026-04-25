@@ -1,6 +1,7 @@
 import json
 import re
 from typing import Optional
+from urllib.parse import urlparse
 
 import httpx
 
@@ -16,8 +17,42 @@ MODEL_PREFERENCE = [
 _resolved_model: Optional[str] = None
 
 
+def _normalize_hf_space_url(base_url: str) -> str:
+    """
+    Accept either:
+    - https://<owner>-<space>.hf.space
+    - https://huggingface.co/spaces/<owner>/<space>
+    and return the hf.space app URL.
+    """
+    parsed = urlparse(base_url)
+    host = (parsed.netloc or "").lower()
+    path = (parsed.path or "").strip("/")
+
+    if host.endswith(".hf.space"):
+        return f"{parsed.scheme or 'https'}://{parsed.netloc}".rstrip("/")
+
+    if host == "huggingface.co" and path.startswith("spaces/"):
+        parts = path.split("/")
+        if len(parts) >= 3:
+            owner, space = parts[1], parts[2]
+            return f"https://{owner}-{space}.hf.space"
+
+    return base_url.rstrip("/")
+
+
+def _is_hf_space_base_url(base_url: str) -> bool:
+    try:
+        host = urlparse(base_url).netloc.lower()
+    except Exception:
+        return False
+    return host.endswith(".hf.space") or host == "huggingface.co"
+
+
 def _normalize_base_url(base_url: Optional[str] = None) -> str:
-    return (base_url or config.OLLAMA_BASE_URL or OLLAMA_BASE).rstrip("/")
+    candidate = (base_url or config.OLLAMA_BASE_URL or OLLAMA_BASE).rstrip("/")
+    if _is_hf_space_base_url(candidate):
+        return _normalize_hf_space_url(candidate)
+    return candidate
 
 
 def _headers() -> dict[str, str]:
@@ -59,6 +94,43 @@ def chat(
     temperature: float = 0.7,
 ) -> str:
     base_url = _normalize_base_url(base_url)
+    if base_url.endswith(".hf.space"):
+        # HF Space contract uses /api/generate and /api/generate_vision.
+        prompt = f"{system}\n\n{user}".strip()
+        if images:
+            payload = {
+                "prompt": prompt,
+                "image_base64": images[0],
+                "max_tokens": 512,
+            }
+            endpoint = "/api/generate_vision"
+        else:
+            payload = {
+                "prompt": prompt,
+                "max_tokens": 512,
+            }
+            endpoint = "/api/generate"
+
+        try:
+            response = httpx.post(
+                f"{base_url}{endpoint}",
+                json=payload,
+                timeout=120.0,
+                headers=_headers(),
+            )
+            response.raise_for_status()
+            body = response.json()
+            return (
+                body.get("response")
+                or body.get("text")
+                or body.get("output")
+                or ""
+            ).strip()
+        except httpx.TimeoutException as exc:
+            raise RuntimeError("HF Space timed out. Is the Space warm?") from exc
+        except Exception as exc:
+            raise RuntimeError(f"HF Space error: {exc}") from exc
+
     model = get_model(base_url)
     payload = {
         "model": model,
@@ -106,6 +178,29 @@ def extract_json(text: str) -> dict | list:
 
 def is_ready(base_url: str = OLLAMA_BASE) -> dict:
     base_url = _normalize_base_url(base_url)
+    if base_url.endswith(".hf.space"):
+        try:
+            response = httpx.get(f"{base_url}/api/health", timeout=5.0, headers=_headers())
+            response.raise_for_status()
+            health = response.json()
+            model_loaded = bool(health.get("model_loaded", False))
+            model_name = health.get("model_file") or health.get("model_repo") or "hf-space-model"
+            return {
+                "ready": model_loaded,
+                "model": model_name,
+                "all_models": [model_name] if model_loaded else [],
+                "ollama_running": True,
+                "ollama_url": base_url,
+            }
+        except Exception:
+            return {
+                "ready": False,
+                "model": None,
+                "all_models": [],
+                "ollama_running": False,
+                "ollama_url": base_url,
+            }
+
     try:
         response = httpx.get(f"{base_url}/api/tags", timeout=3.0, headers=_headers())
         models = [model["name"] for model in response.json().get("models", [])]
