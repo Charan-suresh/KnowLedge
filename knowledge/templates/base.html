@@ -145,7 +145,7 @@
   <div id="toastHost" class="toast-host"></div>
 
   <script>
-    const DEFAULT_OLLAMA_URL = "http://localhost:11434";
+    const DEFAULT_OLLAMA_URL = {{ default_ollama_url|tojson }};
     const LOADING_MESSAGES = [
       "Connecting to local Gemma 4...",
       "Checking Ollama...",

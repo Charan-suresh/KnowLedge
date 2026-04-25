@@ -28,13 +28,14 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from . import config
 from . import ollama_client
 from .init_db import DB_PATH, init
 from .prompts import LENS_SYSTEM, SAGE_SYSTEM, SCOUT_SYSTEM, SOLO_SYSTEM
 from .seed_demo import seed
 
 BASE_DIR = Path(__file__).resolve().parent
-DEFAULT_OLLAMA_URL = "http://localhost:11434"
+DEFAULT_OLLAMA_URL = config.OLLAMA_BASE_URL
 DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
 
 

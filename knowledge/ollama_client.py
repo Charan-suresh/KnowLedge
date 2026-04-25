@@ -4,7 +4,9 @@ from typing import Optional
 
 import httpx
 
-OLLAMA_BASE = "http://localhost:11434"
+from . import config
+
+OLLAMA_BASE = config.OLLAMA_BASE_URL
 MODEL_PREFERENCE = [
     "gemma4:e4b",
     "gemma3:4b",
@@ -14,10 +16,17 @@ MODEL_PREFERENCE = [
 _resolved_model: Optional[str] = None
 
 
+def _headers() -> dict[str, str]:
+    headers = {}
+    if config.OLLAMA_AUTH_TOKEN:
+        headers["Authorization"] = f"Bearer {config.OLLAMA_AUTH_TOKEN}"
+    return headers
+
+
 def resolve_model(base_url: str = OLLAMA_BASE) -> Optional[str]:
     global _resolved_model
     try:
-        response = httpx.get(f"{base_url}/api/tags", timeout=5.0)
+        response = httpx.get(f"{base_url}/api/tags", timeout=5.0, headers=_headers())
         available = [model["name"] for model in response.json().get("models", [])]
         for preferred in MODEL_PREFERENCE:
             for candidate in available:
@@ -61,6 +70,7 @@ def chat(
             f"{base_url}/api/chat",
             json=payload,
             timeout=120.0,
+            headers=_headers(),
         )
         response.raise_for_status()
         return response.json()["message"]["content"].strip()
@@ -89,7 +99,7 @@ def extract_json(text: str) -> dict | list:
 
 def is_ready(base_url: str = OLLAMA_BASE) -> dict:
     try:
-        response = httpx.get(f"{base_url}/api/tags", timeout=3.0)
+        response = httpx.get(f"{base_url}/api/tags", timeout=3.0, headers=_headers())
         models = [model["name"] for model in response.json().get("models", [])]
         model = resolve_model(base_url)
         return {
