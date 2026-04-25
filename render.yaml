@@ -1,51 +1,6 @@
 services:
   - type: web
     name: knowledge
-    runtime: python
-    region: oregon
-    plan: free
+    env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: >-
-      gunicorn knowledge.main:app
-      --worker-class uvicorn.workers.UvicornWorker
-      --workers 1
-      --bind 0.0.0.0:${PORT:-10000}
-      --timeout 120
-      --keepalive 5
-      --log-level info
-    healthCheckPath: /health
-    envVars:
-      - key: ENVIRONMENT
-        value: production
-      - key: DEMO_MODE
-        value: "true"
-      - key: PORT
-        value: "10000"
-      - key: OLLAMA_BASE_URL
-        sync: false
-      - key: OLLAMA_AUTH_TOKEN
-        sync: false
-      - key: INFERENCE_BACKEND
-        value: hf_space
-      - key: HF_SPACE_URL
-        sync: false
-      - key: GEMINI_API_KEY
-        sync: false
-      - key: SECRET_KEY
-        generateValue: true
-      - key: SCOUT_MODEL
-        value: gemma4:e2b
-      - key: SAGE_MODEL
-        value: gemma4:e4b
-      - key: LENS_MODEL
-        value: gemma4:e4b
-      - key: DB_PATH
-        value: /tmp/knowledge.db
-      - key: CHROMA_PATH
-        value: /tmp/chroma_store
-      - key: LOW_RAM
-        value: "false"
-      - key: SAGE_TIMEOUT_SECONDS
-        value: "90"
-      - key: PYTHON_VERSION
-        value: 3.11.0
+    startCommand: gunicorn knowledge.main:app --worker-class uvicorn.workers.UvicornWorker --workers 1 --bind 0.0.0.0:$PORT --timeout 120 --log-level info

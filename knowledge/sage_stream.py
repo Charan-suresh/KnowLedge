@@ -257,12 +257,12 @@ async def run_sage_ollama(
         err_type = type(e).__name__
 
         # Missing configuration
-        if "HF_SPACE_URL" in err_str:
+        if "OLLAMA_BASE_URL" in err_str:
             yield (
                 "\n[Sage error: Inference backend is not configured. "
-                "Please set the HF_SPACE_URL environment variable on Render.]"
+                "Please set the OLLAMA_BASE_URL environment variable.]"
             )
-        # HF Space cold-start / connection refused
+        # Local server connection refused
         elif (
             "ConnectError" in err_type
             or "connect" in err_str.lower()
@@ -270,14 +270,14 @@ async def run_sage_ollama(
             or "Could not get Gradio config" in err_str
         ):
             yield (
-                "\n[Sage error: Could not reach the Hugging Face inference Space. "
-                "The Space may be waking up from sleep — please wait 20–30 seconds and try again.]"
+                "\n[Sage error: Could not reach the local Ollama server. "
+                "Make sure Ollama is running, then try again.]"
             )
         # Timeout during model loading or generation
         elif "timeout" in err_str.lower() or "Timeout" in err_type or "ReadTimeout" in err_type:
             yield (
                 "\n[Sage error: The inference request timed out. "
-                "Gemma 4 may still be loading on the GPU — please try again in a moment.]"
+                "Gemma 4 may still be loading — please try again in a moment.]"
             )
         # HF Space returned an HTTP error (e.g. 503 while waking)
         elif "HTTPStatusError" in err_type or "status code" in err_str.lower():

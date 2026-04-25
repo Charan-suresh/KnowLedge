@@ -1,379 +1,216 @@
 {% extends "base.html" %}
 
-{% block title %}Your Ledger · KnowLedge{% endblock %}
-{% block topbar_title %}Your Learning Ledger{% endblock %}
-
-{% block topbar_actions %}{% endblock %}
+{% block title %}Ledger · KnowLedge{% endblock %}
+{% block eyebrow %}Student Workspace{% endblock %}
+{% block page_title %}Concept Ledger{% endblock %}
 
 {% block content %}
-<input type="hidden" id="current-concept" value="">
-
-<div class="dashboard-grid">
-  <div class="dashboard-stack">
-    <section class="scout-box">
-      <div class="scout-header">
-        <span class="scout-icon">⚡</span>
-        <div>
-          <div class="scout-title">Paste study content</div>
-          <div class="scout-sub">Scout will extract concepts and add them to your ledger</div>
-        </div>
-      </div>
-      <textarea id="scout-input" placeholder="Paste your notes, a textbook excerpt, AI-generated explanation, or code snippet..." rows="4"></textarea>
-      <div class="scout-actions">
-        <button onclick="runScout()" class="btn-primary">Extract concepts</button>
-        <span class="scout-hint">Works best with 1–3 paragraphs</span>
-      </div>
-      <div id="scout-status" class="scout-status hidden"></div>
-    </section>
-
-    <section class="dashboard-card">
-      <div class="ledger-header">
-        <div>
-          <h2 class="ledger-title">Concept Ledger</h2>
-          <span class="ledger-count" id="concept-count">0 concepts tracked</span>
-        </div>
-        <div class="ledger-filters">
-          <button class="filter-btn active" onclick="filterLedger('all')">All</button>
-          <button class="filter-btn" onclick="filterLedger('on-loan')">On Loan</button>
-          <button class="filter-btn" onclick="filterLedger('persists')">Persists</button>
-          <button class="filter-btn" onclick="filterLedger('clear')">Clear</button>
-        </div>
-      </div>
-      <div class="concept-list" id="concept-list"></div>
-    </section>
+<section class="hero-card">
+  <div>
+    <p class="eyebrow">Scout → Ledger</p>
+    <h2>Paste study material and turn borrowed knowledge into tracked debt.</h2>
+    <p class="hero-copy">Scout tags concepts, Sage clears them Socratically, Lens checks handwritten reasoning, and the ledger updates immediately.</p>
   </div>
-
-  <div class="dashboard-stack">
-    <section class="debt-card">
-      <div class="debt-card-header">
-        <span class="debt-title">Learning Debt</span>
-        <span class="debt-score-badge" id="debt-score-badge">--%</span>
-      </div>
-
-      <div class="debt-ring-wrap">
-        <svg viewBox="0 0 120 120" class="debt-ring">
-          <circle cx="60" cy="60" r="50" fill="none" stroke="#F3F4F6" stroke-width="12"/>
-          <circle cx="60" cy="60" r="50" fill="none" stroke="#DC2626" stroke-width="12"
-                  stroke-dasharray="314" stroke-dashoffset="157" stroke-linecap="round"
-                  transform="rotate(-90 60 60)" id="debt-arc"/>
-          <text x="60" y="56" text-anchor="middle" font-size="22" font-weight="600" fill="#111827" id="debt-ring-pct">50%</text>
-          <text x="60" y="72" text-anchor="middle" font-size="10" fill="#6B7280">debt</text>
-        </svg>
-      </div>
-
-      <div class="debt-stats">
-        <div class="debt-stat"><span class="ds-value" id="stat-loan">0</span><span class="ds-label">On Loan</span></div>
-        <div class="debt-stat"><span class="ds-value" id="stat-persists">0</span><span class="ds-label">Persists</span></div>
-        <div class="debt-stat"><span class="ds-value" id="stat-clear">0</span><span class="ds-label">Clear</span></div>
-      </div>
-
-      <div class="next-to-clear">
-        <div class="ntc-label">Priority concept</div>
-        <div class="ntc-concept" id="priority-concept">Start a session to see your priority</div>
-        <button class="btn-primary full-width" id="start-priority-session" onclick="startPrioritySession()">Clear it now →</button>
-      </div>
-    </section>
-
-    <section class="lens-card">
-      <div class="lens-header">
-        <span>🔬</span>
-        <div>
-          <div class="lens-title">Lens verification</div>
-          <div class="lens-sub">Upload handwritten notes to verify understanding</div>
-        </div>
-      </div>
-      <label class="lens-upload-area" for="lens-file-input">
-        <div class="lens-upload-icon">📷</div>
-        <div class="lens-upload-text">Drop an image or PDF here</div>
-        <div class="lens-upload-hint">JPG, PNG, WEBP, PDF — max 10MB</div>
-        <input type="file" id="lens-file-input" accept=".jpg,.jpeg,.png,.webp,.pdf" onchange="runLens(this.files[0])" style="display:none">
-      </label>
-      <div id="lens-result" class="lens-result hidden"></div>
-    </section>
+  <div class="hero-pill-grid">
+    <div class="hero-pill"><span id="statLoan">0</span><small>On Loan</small></div>
+    <div class="hero-pill"><span id="statClear">0</span><small>Clear</small></div>
+    <div class="hero-pill"><span id="statPers">0</span><small>Persists</small></div>
+    <div class="hero-pill"><span id="statDebt">0%</span><small>Debt Score</small></div>
   </div>
+</section>
+
+<div class="ledger-grid">
+  <section class="panel-card">
+    <div class="panel-head">
+      <div>
+        <p class="eyebrow">Scout</p>
+        <h3>Extract concepts from study content</h3>
+      </div>
+      <button class="btn btn-primary" id="scoutBtn" type="button" onclick="runScout()">Tag concepts</button>
+    </div>
+    <textarea id="scoutInput" rows="9" placeholder="Paste two or three paragraphs from notes, a textbook section, or your own explanation..."></textarea>
+    <p id="scoutStatus" class="inline-status" style="display:none"></p>
+  </section>
+
+  <section class="panel-card">
+    <div class="panel-head">
+      <div>
+        <p class="eyebrow">Lens</p>
+        <h3>Verify handwritten understanding</h3>
+      </div>
+    </div>
+    <label class="upload-box" for="lensFile">
+      <input id="lensFile" type="file" accept=".jpg,.jpeg,.png,.webp,.pdf" onchange="runLens(this.files[0])">
+      <strong>Drop a photo or PDF</strong>
+      <span>Lens uses the same local Gemma model for vision checks.</span>
+    </label>
+    <div id="lensResult" class="lens-card"></div>
+  </section>
 </div>
+
+<section class="panel-card">
+  <div class="panel-head">
+    <div>
+      <p class="eyebrow">Ledger</p>
+      <h3>Tracked concepts</h3>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="ledger-table">
+      <thead>
+        <tr>
+          <th>Concept</th>
+          <th>Status</th>
+          <th>Confidence</th>
+          <th>Last Seen</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="conceptTableBody">
+        <tr><td colspan="5" class="empty-state">No concepts yet — paste content above to get started.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
 {% endblock %}
 
 {% block scripts %}
 <script>
-  const initialDebts = {{ debts_json | safe }};
-  const ledgerSessionId = localStorage.getItem('ledgerSessionId') || `ledger-${Date.now()}`;
-  localStorage.setItem('ledgerSessionId', ledgerSessionId);
-  const statusOrder = { 'on-loan': 0, 'persists': 1, 'clear': 2 };
-  let currentFilter = 'all';
-  let ledgerConcepts = [];
-
-  function normalizeStatus(status) {
-    if (status === 'on_loan' || status === 'borrowed') return 'on-loan';
-    if (status === 'persists') return 'persists';
-    return 'clear';
-  }
-
-  function formatRelative(value) {
-    if (!value) return 'today';
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return 'today';
-    const delta = Math.max(0, Math.round((Date.now() - parsed.getTime()) / 86400000));
-    if (delta === 0) return 'today';
-    if (delta === 1) return '1 day ago';
-    return `${delta} days ago`;
-  }
-
-  function guessSubject(name) {
-    const lower = (name || '').toLowerCase();
-    if (lower.includes('physics') || lower.includes('calculus')) return 'STEM';
-    if (lower.includes('chemistry') || lower.includes('biology')) return 'Science';
-    if (lower.includes('english') || lower.includes('themes')) return 'Humanities';
-    if (lower.includes('history') || lower.includes('civics') || lower.includes('government')) return 'Social Studies';
-    if (lower.includes('capstone')) return 'Project';
-    return 'General';
-  }
-
-  function normalizeDebt(row) {
-    const status = normalizeStatus(row.status);
-    return {
-      id: row.id || row.concept,
-      name: row.concept,
-      subject: row.subject || guessSubject(row.concept),
-      last_seen: formatRelative(row.timestamp),
-      confidence: Number(row.confidence || 0),
-      status,
-      source_text: row.source_text || '',
-      timestamp: row.timestamp,
-    };
-  }
-
-  function renderConcept(c) {
-    const statusConfig = {
-      'on-loan': { label: 'On Loan', color: '#FEF3C7', text: '#92400E', dot: '#D97706' },
-      'persists': { label: 'Persists', color: '#FEE2E2', text: '#991B1B', dot: '#DC2626' },
-      'clear': { label: 'Clear', color: '#D1FAE5', text: '#065F46', dot: '#059669' },
-    };
-    const s = statusConfig[c.status] || statusConfig['on-loan'];
-    const conf = Math.round((c.confidence || 0) * 100);
-    const confColor = conf >= 80 ? '#059669' : conf >= 50 ? '#D97706' : '#DC2626';
-
-    return `
-      <div class="concept-row" data-status="${c.status}">
-        <div class="concept-main">
-          <div class="concept-name">${c.name}</div>
-          <div class="concept-meta">${c.subject || 'General'} · Last seen ${c.last_seen || 'today'}</div>
-        </div>
-        <div class="concept-confidence">
-          <div class="conf-bar-wrap"><div class="conf-bar" style="width:${conf}%; background:${confColor}"></div></div>
-          <span class="conf-label" style="color:${confColor}">${conf}%</span>
-        </div>
-        <div class="concept-status-badge" style="background:${s.color}; color:${s.text}">
-          <span class="status-dot" style="background:${s.dot}"></span>${s.label}
-        </div>
-        <button class="btn-clear-concept" onclick="startSageSession('${c.id}', '${c.name.replace(/'/g, "&#39;")}')">Clear with Sage →</button>
-      </div>`;
-  }
-
-  function updateDebtSummary(concepts) {
-    const total = concepts.length || 0;
-    const onLoan = concepts.filter(item => item.status === 'on-loan').length;
-    const persists = concepts.filter(item => item.status === 'persists').length;
-    const clear = concepts.filter(item => item.status === 'clear').length;
-    const score = total ? Math.round(((onLoan + persists) / total) * 100) : 0;
-    document.getElementById('stat-loan').textContent = String(onLoan);
-    document.getElementById('stat-persists').textContent = String(persists);
-    document.getElementById('stat-clear').textContent = String(clear);
-    document.getElementById('concept-count').textContent = `${total} concept${total === 1 ? '' : 's'} tracked`;
-    document.getElementById('debt-score-badge').textContent = `${score}%`;
-    document.getElementById('debt-ring-pct').textContent = `${score}%`;
-    const arc = document.getElementById('debt-arc');
-    if (arc) {
-      const circumference = 314;
-      arc.style.strokeDashoffset = String(circumference - (circumference * score / 100));
-    }
-
-    const priority = concepts
-      .filter(item => item.status !== 'clear')
-      .sort((a, b) => (a.confidence - b.confidence) || (statusOrder[a.status] - statusOrder[b.status]))[0];
-    document.getElementById('priority-concept').textContent = priority
-      ? priority.name
-      : 'Everything is clear. Try a fresh concept.';
-  }
-
-  function filterLedger(filter) {
-    currentFilter = filter;
-    document.querySelectorAll('.filter-btn').forEach((button) => button.classList.remove('active'));
-    document.querySelectorAll('.filter-btn').forEach((button) => {
-      if ((button.textContent || '').trim().toLowerCase() === filter.replace('-', ' ')) button.classList.add('active');
-      if (filter === 'all' && button.textContent.trim().toLowerCase() === 'all') button.classList.add('active');
-    });
-    renderLedger(ledgerConcepts);
-  }
-
-  function renderLedger(concepts) {
-    const list = document.getElementById('concept-list');
-    const filtered = currentFilter === 'all' ? concepts : concepts.filter(item => item.status === currentFilter);
-    list.innerHTML = filtered.length ? filtered.map(renderConcept).join('') : '<div class="dashboard-card" style="padding:16px;color:#6B7280;">No concepts found for this filter.</div>';
-    updateDebtSummary(concepts);
-  }
-
-  async function fetchState() {
-    console.log('[ledger] refreshing state');
-    try {
-      const res = await fetch('/api/state');
-      const data = await res.json();
-      ledgerConcepts = (data.debts || []).map(normalizeDebt);
-      console.log('[ledger] refreshed concepts', ledgerConcepts);
-      renderLedger(ledgerConcepts);
-    } catch (e) {
-      console.error('[ledger] state refresh failed', e);
-      showToast('⚠️', 'Connection Error', 'Could not reach backend.');
-    }
-  }
-
   async function runScout() {
-    const input = document.getElementById('scout-input');
-    const value = (input.value || '').trim();
-    if (!value) {
-      showToast('⚠️', 'Empty input', 'Please paste something first.');
+    const content = document.getElementById("scoutInput").value.trim();
+    if (!content) {
+      showToast("Paste some content first", "warn");
       return;
     }
 
-    console.log('[scout] sending paste', { length: value.length });
-    input.value = '';
-    const status = document.getElementById('scout-status');
-    if (status) {
-      status.textContent = 'Scout is analyzing...';
-      status.classList.remove('hidden');
-    }
+    const btn = document.getElementById("scoutBtn");
+    const statusEl = document.getElementById("scoutStatus");
+    btn.disabled = true;
+    btn.textContent = "Extracting...";
+    statusEl.textContent = "Gemma 4 is reading your content...";
+    statusEl.style.display = "block";
 
     try {
-      const res = await fetch('/api/scout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: value, session_id: ledgerSessionId, student_id: 'demo' }),
+      const r = await fetch("/api/scout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(apiBody({
+          content,
+          session_id: getSessionId(),
+        })),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.detail || `Server error ${res.status}`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = await r.json();
+      if (data.concepts && data.concepts.length > 0) {
+        statusEl.textContent = `${data.concepts.length} concepts added to your ledger`;
+        statusEl.style.color = "#4ADE80";
+        document.getElementById("scoutInput").value = "";
+        await refreshLedger();
+      } else {
+        statusEl.textContent = "No concepts found — try more detailed content";
+        statusEl.style.color = "#FBBF24";
       }
-      console.log('[scout] response', data);
-      if (status) status.textContent = `${data.inserted || 0} concept${(data.inserted || 0) === 1 ? '' : 's'} added to ledger.`;
-      showToast((data.inserted || 0) > 0 ? '✅' : '⚠️', (data.inserted || 0) > 0 ? 'Analysis complete' : 'No concepts detected', (data.inserted || 0) > 0 ? `${data.inserted} concept${data.inserted === 1 ? '' : 's'} added to ledger.` : 'Try pasting a larger explanation or code block.');
-      await fetchState();
     } catch (e) {
-      console.error('[scout] failed', e);
-      if (status) status.textContent = 'Scout failed.';
-      showToast('❌', 'Error', e?.message || 'Failed to tag concepts.');
+      statusEl.textContent = `Error: ${e.message}`;
+      statusEl.style.color = "#F87171";
+      showToast(`Scout failed: ${e.message}`, "error");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Tag concepts";
     }
   }
 
-  function startSageSession(conceptId, conceptName) {
-    document.getElementById('current-concept').value = conceptName;
-    openModal(conceptName);
-  }
+  async function refreshLedger() {
+    const r = await fetch(`/api/concepts?student_id=${getStudentId()}`);
+    const data = await r.json();
+    const concepts = data.concepts || [];
 
-  function startPrioritySession() {
-    const priority = ledgerConcepts
-      .filter(item => item.status !== 'clear')
-      .sort((a, b) => a.confidence - b.confidence)[0] || ledgerConcepts[0];
-    if (!priority) {
-      showToast('⚠️', 'No concept selected', 'Add some study content first.');
+    const onLoan = concepts.filter(c => c.status === "on-loan");
+    const clear = concepts.filter(c => c.status === "clear");
+    const pers = concepts.filter(c => c.status === "persists");
+    const total = concepts.length;
+    const debt = total > 0 ? Math.round((onLoan.length + pers.length) / total * 100) : 0;
+
+    document.getElementById("statLoan").textContent = onLoan.length;
+    document.getElementById("statClear").textContent = clear.length;
+    document.getElementById("statPers").textContent = pers.length;
+    document.getElementById("statDebt").textContent = debt + "%";
+
+    const tbody = document.getElementById("conceptTableBody");
+    if (concepts.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="5" class="empty-state">
+        No concepts yet — paste content above to get started.
+      </td></tr>`;
       return;
     }
-    startSageSession(priority.id, priority.name);
-  }
 
-  function renderLensResult(data) {
-    const resultDiv = document.getElementById('lens-result');
-    const qualityColor = {
-      strong: '#059669',
-      partial: '#D97706',
-      weak: '#DC2626',
-    }[data.reasoning_quality] || '#6B7280';
-    resultDiv.innerHTML = `
-      <div class="dashboard-card" style="padding: 16px; background:#fff;">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-          <span class="view-toggle-pill" style="background:${qualityColor}14;color:${qualityColor};border-color:${qualityColor}33;">${data.reasoning_quality} reasoning</span>
-          <span class="view-toggle-pill">${data.is_handwritten ? '✓ Handwritten' : '⚠ Not handwritten'}</span>
-        </div>
-        ${data.elements_identified?.length ? `<div class="report-section-label">Concepts identified</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">${data.elements_identified.map((item) => `<span class="view-toggle-pill">${item}</span>`).join('')}</div>` : ''}
-        ${data.gaps_found?.length ? `<div class="report-section-label">Gaps found</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">${data.gaps_found.map((item) => `<span class="view-toggle-pill" style="border-color:#FCA5A5;color:#991B1B;">${item}</span>`).join('')}</div>` : ''}
-        <div style="font-size:13px;line-height:1.6;color:#111827;margin-bottom:8px;">${data.feedback || ''}</div>
-        <div style="font-size:13px;line-height:1.6;color:#065F46;">→ ${data.recommendation || ''}</div>
-      </div>`;
-    resultDiv.classList.remove('hidden');
+    tbody.innerHTML = concepts.map(c => {
+      const conf = Math.round((c.confidence || 0) * 100);
+      const confColor = conf >= 80 ? "#4ADE80" : conf >= 50 ? "#FBBF24" : "#F87171";
+      const statusClass = {
+        "on-loan": "sp-loan",
+        "clear": "sp-clear",
+        "persists": "sp-pers",
+      }[c.status] || "sp-loan";
+      const statusLabel = {
+        "on-loan": "On Loan",
+        "clear": "Clear",
+        "persists": "Persists",
+      }[c.status] || c.status;
+      const lastSeen = c.last_seen ? new Date(c.last_seen).toLocaleDateString() : "just now";
+      return `
+        <tr data-id="${c.id}" data-concept="${c.name}">
+          <td>
+            <div class="concept-name">${c.name}</div>
+            <div class="concept-sub">${c.subject || "General"}</div>
+          </td>
+          <td><span class="status-pill ${statusClass}">${statusLabel}</span></td>
+          <td>
+            <div class="conf-bar-wrap">
+              <div class="conf-bar" style="width:${conf}%;background:${confColor}"></div>
+            </div>
+            <div class="conf-pct">${conf}%</div>
+          </td>
+          <td class="tr-time">${lastSeen}</td>
+          <td>
+            <button class="btn btn-ghost" type="button" onclick="openSage('${c.id}','${c.name.replace(/'/g, "\\'")}')">
+              Clear with Sage →
+            </button>
+          </td>
+        </tr>`;
+    }).join("");
   }
 
   async function runLens(file) {
     if (!file) return;
-    const resultDiv = document.getElementById('lens-result');
-    resultDiv.innerHTML = `<div class="dashboard-card" style="padding:16px;">🔬 Analyzing your work...</div>`;
-    resultDiv.classList.remove('hidden');
+    const resultEl = document.getElementById("lensResult");
+    resultEl.innerHTML = `<p class="inline-status">Analyzing with Lens...</p>`;
 
     const formData = new FormData();
-    formData.append('file', file);
-    formData.append('concept', document.getElementById('current-concept').value || document.getElementById('priority-concept').textContent || '');
+    formData.append("file", file);
+    formData.append("concept", "");
+    formData.append("student_id", getStudentId());
+    formData.append("ollama_url", getLLMConfig().ollama_url);
 
     try {
-      const res = await fetch('/api/lens/analyze', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Lens analysis failed');
-      renderLensResult(data);
-      showToast('✅', 'Lens complete', data.recommendation || 'Analysis finished.');
+      const r = await fetch("/api/lens", { method: "POST", body: formData });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = await r.json();
+      resultEl.innerHTML = `
+        <div class="lens-result-grid">
+          <div><span class="eyebrow">Reasoning</span><strong>${data.reasoning_quality || "partial"}</strong></div>
+          <div><span class="eyebrow">Handwritten</span><strong>${data.is_handwritten ? "Yes" : "No"}</strong></div>
+        </div>
+        <p><strong>Concepts found:</strong> ${(data.concepts_found || []).join(", ") || "None"}</p>
+        <p><strong>Gaps:</strong> ${(data.gaps || []).join(", ") || "None found"}</p>
+        <p>${data.feedback || ""}</p>
+        <p><strong>Next step:</strong> ${data.recommendation || ""}</p>
+      `;
     } catch (e) {
-      console.error('[lens] failed', e);
-      resultDiv.innerHTML = `<div class="dashboard-card" style="padding:16px;color:#991B1B;">Analysis failed. Check that your model supports vision (e.g. Gemma vision or LLaVA).</div>`;
-      resultDiv.classList.remove('hidden');
-      showToast('❌', 'Lens Error', e?.message || 'Failed to verify image.');
+      resultEl.innerHTML = `<p class="inline-status" style="color:#F87171">Lens failed: ${e.message}</p>`;
     }
   }
 
-  function maybeStartTour() {
-    const tourRequested = new URLSearchParams(window.location.search).get('tour') === '1';
-    const seen = localStorage.getItem('ledgerTourDismissed') === '1';
-    if (!tourRequested || seen) return;
-    const steps = [
-      { selector: '#scout-input', text: 'Paste your study content here - Scout extracts concepts.' },
-      { selector: '#concept-list', text: 'Concepts appear here with their status and confidence.' },
-      { selector: '.btn-clear-concept', text: 'Click here to start a Socratic clearing session.' },
-      { selector: '#debt-arc', text: 'Your debt score drops as you clear concepts.' },
-      { selector: '.kl-tab[href="/progress"]', text: 'Track your improvement over time.' },
-    ];
-    let index = 0;
-    const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(17,24,39,0.52);z-index:180;display:flex;align-items:center;justify-content:center;padding:24px;';
-    const card = document.createElement('div');
-    card.style.cssText = 'max-width:420px;background:white;border-radius:20px;padding:20px;box-shadow:0 18px 50px rgba(17,24,39,0.2);';
-    overlay.appendChild(card);
-    document.body.appendChild(overlay);
-
-    function highlightCurrent() {
-      const step = steps[index];
-      const target = document.querySelector(step.selector);
-      document.querySelectorAll('.tour-highlight').forEach((node) => node.classList.remove('tour-highlight'));
-      if (target) target.classList.add('tour-highlight');
-      card.innerHTML = `<div style="font-size:12px;color:#6B7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">Demo tour</div><div style="font-size:16px;line-height:1.6;color:#111827;margin-bottom:14px;">${step.text}</div><button class="btn-primary" id="tour-next-btn">${index === steps.length - 1 ? 'Finish tour' : 'Next'}</button>`;
-      const nextBtn = card.querySelector('#tour-next-btn');
-      nextBtn.onclick = () => {
-        index += 1;
-        if (index >= steps.length) {
-          localStorage.setItem('ledgerTourDismissed', '1');
-          overlay.remove();
-          return;
-        }
-        highlightCurrent();
-      };
-    }
-
-    overlay.onclick = () => {
-      localStorage.setItem('ledgerTourDismissed', '1');
-      overlay.remove();
-    };
-
-    highlightCurrent();
-  }
-
-  document.querySelectorAll('input[type="file"]').forEach((el) => {
-    el.value = '';
-  });
-
-  fetchState().then(maybeStartTour);
+  document.addEventListener("DOMContentLoaded", refreshLedger);
 </script>
 {% endblock %}

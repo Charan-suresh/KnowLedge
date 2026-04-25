@@ -1,321 +1,92 @@
 {% extends "base.html" %}
 
 {% block title %}Progress · KnowLedge{% endblock %}
-{% block topbar_title %}Your Progress{% endblock %}
-{% block topbar_sub %}A live view of debt, streaks, and concept confidence{% endblock %}
-{% block topbar_actions %}{% endblock %}
-
-{% block head %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
-<style>
-  .progress-page {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-  }
-  .progress-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 16px;
-  }
-  .progress-layout {
-    display: grid;
-    grid-template-columns: minmax(0, 1.7fr) minmax(300px, 0.9fr);
-    gap: 22px;
-    align-items: start;
-  }
-  .progress-chart-card,
-  .progress-summary-card,
-  .progress-hero-card {
-    padding: 18px;
-    background: white;
-    border: 1px solid var(--rule);
-    border-radius: 20px;
-    box-shadow: var(--shadow-sm);
-  }
-  .progress-hero-card {
-    box-shadow: var(--shadow-md);
-  }
-  .progress-title {
-    font-family: 'Playfair Display', serif;
-    font-size: 26px;
-    margin-bottom: 8px;
-  }
-  .progress-copy {
-    font-size: 15px;
-    line-height: 1.7;
-    color: var(--ink);
-  }
-  .progress-meta {
-    margin-top: 10px;
-    font-size: 12px;
-    color: var(--ink-muted);
-  }
-  .progress-snapshot-list {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-  .snapshot-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 12px 14px;
-    border: 1px solid var(--rule);
-    border-radius: 14px;
-    background: #fff;
-  }
-  .snapshot-name {
-    font-size: 14px;
-    font-weight: 600;
-    color: #111827;
-  }
-  .snapshot-meta {
-    font-size: 12px;
-    color: #6B7280;
-    margin-top: 2px;
-  }
-  .snapshot-score {
-    border-radius: 999px;
-    padding: 7px 12px;
-    font-size: 13px;
-    font-weight: 700;
-    background: #F9FAFB;
-  }
-  .progress-chart-wrap {
-    position: relative;
-    min-height: 280px;
-  }
-  .stat-card .stat-sub {
-    line-height: 1.5;
-  }
-  @media (max-width: 980px) {
-    .progress-grid,
-    .progress-layout {
-      grid-template-columns: 1fr 1fr;
-    }
-    .progress-layout {
-      grid-template-columns: 1fr;
-    }
-  }
-  @media (max-width: 720px) {
-    .progress-grid {
-      grid-template-columns: 1fr 1fr;
-    }
-  }
-  @media print {
-    .kl-nav, .demo-banner, .no-print, #toast-container, .modal-backdrop, .floating-help-btn {
-      display: none !important;
-    }
-    .main-content, .content {
-      margin: 0 !important;
-      padding: 0 !important;
-      width: 100% !important;
-    }
-    body {
-      background: white;
-      color: black;
-      font-size: 12pt;
-    }
-    .progress-chart-card, .progress-summary-card, .progress-hero-card {
-      box-shadow: none;
-      break-inside: avoid;
-    }
-  }
-</style>
-{% endblock %}
+{% block eyebrow %}Progress Analytics{% endblock %}
+{% block page_title %}Learning Progress{% endblock %}
 
 {% block content %}
-<div class="progress-page">
-  <section class="progress-hero-card">
-    <div class="progress-title">Progress that updates as you learn</div>
-    <div class="progress-copy" id="progress-summary-copy">Loading your latest progress summary...</div>
-    <div class="progress-meta" id="progress-summary-meta"></div>
+<section class="hero-card">
+  <div>
+    <p class="eyebrow">Live Summary</p>
+    <h2>Progress fills in as concepts move from debt to understanding.</h2>
+    <p class="hero-copy">This page reads directly from the local SQLite ledger and cleared-session history.</p>
+  </div>
+</section>
+
+<div class="stats-grid">
+  <div class="stat-card"><span>Debt Score</span><strong id="pDebt">0%</strong></div>
+  <div class="stat-card"><span>Cleared</span><strong id="pCleared">0</strong></div>
+  <div class="stat-card"><span>Avg Days</span><strong id="pAvgDays">0</strong></div>
+  <div class="stat-card"><span>Streak</span><strong id="pStreak">0</strong></div>
+</div>
+
+<div class="progress-grid">
+  <section class="panel-card">
+    <div class="panel-head">
+      <div>
+        <p class="eyebrow">Comprehension</p>
+        <h3>Concept confidence</h3>
+      </div>
+    </div>
+    <div id="conceptBars" class="bars-stack"></div>
   </section>
 
-  <section class="progress-grid">
-    <div class="stat-card ink">
-      <div class="stat-label">Debt Score Today</div>
-      <div class="stat-val" id="summary-debt-score">--%</div>
-      <div class="stat-sub">% of concepts not yet Clear</div>
-    </div>
-    <div class="stat-card teal">
-      <div class="stat-label">Cleared this month</div>
-      <div class="stat-val" id="summary-cleared">--</div>
-      <div class="stat-sub">concepts moved to Clear</div>
-    </div>
-    <div class="stat-card amber">
-      <div class="stat-label">Avg. days to clear</div>
-      <div class="stat-val" id="summary-avg-days">--</div>
-      <div class="stat-sub">from borrowed to clear</div>
-    </div>
-    <div class="stat-card coral">
-      <div class="stat-label">Current streak</div>
-      <div class="stat-val" id="summary-streak">--</div>
-      <div class="stat-sub">consecutive days with a session</div>
-    </div>
-  </section>
-
-  <section class="progress-layout">
-    <div class="dashboard-stack">
-      <div class="progress-chart-card">
-        <div class="ledger-header">
-          <div>
-            <h2 class="ledger-title">Debt score over time</h2>
-            <span class="ledger-count">Live history from the last 14 days</span>
-          </div>
-        </div>
-        <div class="progress-chart-wrap"><canvas id="debt-chart"></canvas></div>
-      </div>
-
-      <div class="progress-chart-card">
-        <div class="ledger-header">
-          <div>
-            <h2 class="ledger-title">Comprehension by concept</h2>
-            <span class="ledger-count">Higher bars mean stronger understanding</span>
-          </div>
-        </div>
-        <div class="progress-chart-wrap"><canvas id="concept-chart"></canvas></div>
+  <section class="panel-card">
+    <div class="panel-head">
+      <div>
+        <p class="eyebrow">Trend</p>
+        <h3>Recent cleared sessions</h3>
       </div>
     </div>
-
-    <div class="dashboard-stack">
-      <div class="progress-summary-card">
-        <div class="report-section-label">Snapshot</div>
-        <div id="progress-concept-list" class="progress-snapshot-list"></div>
-      </div>
-    </div>
+    <div id="debtTrend" class="trend-wrap"></div>
   </section>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-  const progressSummary = {{ progress_summary_json | safe }};
-  const progressHistory = {{ progress_history_json | safe }};
-  const conceptRows = {{ concept_rows_json | safe }};
+  async function loadProgress() {
+    const sid = getStudentId();
+    const r = await fetch(`/api/progress/summary?student_id=${sid}`);
+    const d = await r.json();
 
-  const chartColors = getComputedStyle(document.body);
-  const amber = chartColors.getPropertyValue('--amber').trim() || '#D4820A';
-  const teal = chartColors.getPropertyValue('--teal').trim() || '#0E7A6E';
-  const coral = chartColors.getPropertyValue('--coral').trim() || '#C94A3A';
-  const ink = chartColors.getPropertyValue('--ink').trim() || '#1C1A14';
-  const rule = chartColors.getPropertyValue('--rule').trim() || 'rgba(28,26,20,0.12)';
+    document.getElementById("pDebt").textContent = d.debt_score + "%";
+    document.getElementById("pCleared").textContent = d.cleared_month;
+    document.getElementById("pAvgDays").textContent = d.avg_days;
+    document.getElementById("pStreak").textContent = d.streak;
 
-  Chart.defaults.font.family = "'DM Sans', sans-serif";
-  Chart.defaults.color = '#7A7565';
-  Chart.defaults.plugins.legend.display = false;
+    const barsEl = document.getElementById("conceptBars");
+    if (d.concepts.length === 0) {
+      barsEl.innerHTML = '<p class="empty-msg">Start a Sage session to see data here.</p>';
+    } else {
+      barsEl.innerHTML = d.concepts.map(c => {
+        const pct = Math.round(c.confidence * 100);
+        const col = pct >= 80 ? "#4ADE80" : pct >= 50 ? "#FBBF24" : "#F87171";
+        return `
+          <div class="h-row">
+            <div class="h-label">${c.name}</div>
+            <div class="h-track">
+              <div class="h-fill" style="width:${pct}%;background:${col}"></div>
+            </div>
+            <div class="h-pct">${pct}%</div>
+          </div>`;
+      }).join("");
+    }
 
-  function fillSummary(summary) {
-    const debtScore = summary.debt_score ?? 0;
-    document.getElementById('summary-debt-score').textContent = `${debtScore}%`;
-    document.getElementById('summary-cleared').textContent = String(summary.cleared_this_month ?? 0);
-    document.getElementById('summary-avg-days').textContent = String(summary.avg_days_to_clear ?? 0);
-    document.getElementById('summary-streak').textContent = String(summary.streak ?? 0);
-    document.getElementById('progress-summary-copy').textContent = `You currently have ${summary.on_loan ?? 0} concepts on loan, ${summary.persists ?? 0} persisting, and ${summary.total ?? 0} total concepts in the ledger.`;
-    document.getElementById('progress-summary-meta').textContent = 'Charts below are driven by the live backend.';
+    const trendEl = document.getElementById("debtTrend");
+    if (d.debt_history.length > 1) {
+      trendEl.innerHTML = d.debt_history.map(h => `
+        <div class="trend-bar-wrap">
+          <div class="trend-bar" style="height:${h.cleared_count * 20}px;background:#4ADE80"></div>
+          <div class="trend-label">${h.day.slice(5)}</div>
+        </div>`).join("");
+    } else {
+      trendEl.innerHTML = '<p class="empty-msg">Complete sessions to see trends.</p>';
+    }
   }
 
-  function renderSnapshot(rows) {
-    const wrap = document.getElementById('progress-concept-list');
-    wrap.innerHTML = (rows || []).map((row) => {
-      const statusColor = row.status === 'clear' ? teal : row.status === 'persists' ? coral : amber;
-      return `
-        <div class="snapshot-row">
-          <div>
-            <div class="snapshot-name">${row.name}</div>
-            <div class="snapshot-meta">${row.subject || 'General'} · ${row.last_seen || 'today'}</div>
-          </div>
-          <div class="snapshot-score" style="color:${statusColor}; border: 1px solid ${statusColor}33;">${Math.round((row.confidence || 0) * 100)}%</div>
-        </div>`;
-    }).join('') || '<div style="color: var(--ink-muted);">No concept snapshots available yet.</div>';
-  }
-
-  async function renderDebtChart() {
-    const response = await fetch('/api/progress/debt-history?student_id=demo');
-    const data = await response.json();
-    new Chart(document.getElementById('debt-chart'), {
-      type: 'line',
-      data: {
-        labels: data.dates || progressHistory.dates || [],
-        datasets: [
-          {
-            label: 'Debt Score %',
-            data: data.scores || progressHistory.scores || [],
-            borderColor: coral,
-            backgroundColor: 'rgba(220,38,38,0.08)',
-            fill: true,
-            tension: 0.35,
-            pointRadius: 3,
-          },
-          {
-            label: 'Cleared %',
-            data: data.cleared || progressHistory.cleared || [],
-            borderColor: teal,
-            backgroundColor: 'rgba(5,150,105,0.08)',
-            fill: true,
-            tension: 0.35,
-            pointRadius: 3,
-          },
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { display: true, position: 'bottom' },
-          tooltip: { backgroundColor: ink }
-        },
-        scales: {
-          x: { grid: { display: false } },
-          y: { min: 0, max: 100, grid: { color: rule }, ticks: { callback: (value) => `${value}%` } }
-        }
-      }
-    });
-  }
-
-  async function renderConceptChart() {
-    const response = await fetch('/api/progress/concepts?student_id=demo');
-    const data = await response.json();
-    const concepts = data.concepts || [];
-    const colors = concepts.map((concept) => concept.confidence >= 0.8 ? teal : concept.confidence >= 0.5 ? amber : coral);
-
-    new Chart(document.getElementById('concept-chart'), {
-      type: 'bar',
-      data: {
-        labels: concepts.map((concept) => concept.name),
-        datasets: [{
-          data: concepts.map((concept) => Math.round((concept.confidence || 0) * 100)),
-          backgroundColor: colors,
-          borderRadius: 6,
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        indexAxis: 'y',
-        plugins: {
-          legend: { display: false },
-          tooltip: { backgroundColor: ink }
-        },
-        scales: {
-          x: { min: 0, max: 100, grid: { color: rule }, ticks: { callback: (value) => `${value}%` } },
-          y: { grid: { display: false } }
-        }
-      }
-    });
-  }
-
-  function updateDateRange(days, button) {
-    showToast('ℹ️', 'Progress view', `This demo view loads live 14-day data; ${days}d is shown as a UI control only.`);
-    document.querySelectorAll('#date-range-group .btn-ghost').forEach((item) => item.classList.remove('active'));
-    if (button) button.classList.add('active');
-  }
-
-  fillSummary(progressSummary || {});
-  renderSnapshot(conceptRows || []);
-  renderDebtChart();
-  renderConceptChart();
+  document.addEventListener("DOMContentLoaded", () => {
+    if (window.location.pathname === "/progress") loadProgress();
+  });
 </script>
 {% endblock %}

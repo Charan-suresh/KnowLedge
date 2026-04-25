@@ -1,950 +1,428 @@
-import json
-import asyncio
-import logging
-import uuid
+"""
+Legacy cloud inference files removed during the Ollama cutover:
+- check_hf.py
+- upload_hf.py
+- test_hf.py
+- hf_requirements.txt
+- legacy space deployment files
+- knowledge/agents/hf_client.py
+- tests/test_hf_client.py
+- tests covering the old remote space contract
+- old loading copy in the shared base template
+- README.md
+- TECHNICAL_ARCHITECTURE.md
+- docs/TECHNICAL_PRESENTATION.html
+"""
+
 import base64
-import httpx
-import queue
-from datetime import datetime, timedelta
-from contextlib import asynccontextmanager
+import json
+import os
+import re
+import sqlite3
+import uuid
+from datetime import date, datetime, timedelta
 from pathlib import Path
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Query
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
+
+from fastapi import Depends, FastAPI, File, Form, Query, Request, UploadFile
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
-from typing import List, Dict, Any
 
-from . import db
-from . import config
-from . import classroom_client
-from .orchestrator import Orchestrator
-from .scout import tag_content
-from .sage_stream import run_sage_ollama
-from .prompt_engineering import generate_solo_question
-from .sync.sender import send_weekly_payload, retry_pending_sync
-from .sync.audit_log import get_sync_audit
-from .routers import progress, reports
-from .routers.ingest import router as ingest_router
-from .routers.classroom import router as classroom_router
-from .lens import ALLOWED_LENS_MIME_TYPES, analyze_document
-from .agents.inference_router import check_health, get_health_status, chat_async
-from .integrity.session_fingerprint import generate_device_key_if_missing
-from .anti_gaming import (
-    score_temporal_fingerprint_with_breakdown,
-    generate_probe,
-    classify_student_response,
-)
+from . import ollama_client
+from .init_db import DB_PATH, init
+from .prompts import LENS_SYSTEM, SAGE_SYSTEM, SCOUT_SYSTEM, SOLO_SYSTEM
+from .seed_demo import seed
 
-logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parent
+DEFAULT_OLLAMA_URL = "http://localhost:11434"
+DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
 
 
-def _log_startup_config_warnings() -> None:
-    if not config.IS_PRODUCTION:
-        return
-
-    if config.INFERENCE_BACKEND == "ollama" and config.OLLAMA_BASE_URL == config.DEFAULT_OLLAMA_BASE_URL:
-        logger.warning(
-            "Production is configured for local Ollama at %s. Set INFERENCE_BACKEND=hf_space "
-            "or provide a reachable remote OLLAMA_BASE_URL.",
-            config.OLLAMA_BASE_URL,
-        )
-
-    if config.INFERENCE_BACKEND == "hf_space" and not config.HF_SPACE_URL:
-        logger.error(
-            "Production is configured for hf_space but HF_SPACE_URL is empty. "
-            "Set HF_SPACE_URL to the deployed Hugging Face Space id or URL."
-        )
-
-    if config.INFERENCE_BACKEND != "ollama" and config.OLLAMA_BASE_URL == config.DEFAULT_OLLAMA_BASE_URL:
-        logger.info(
-            "Ollama embeddings are not configured in production; Chroma RAG will be skipped."
-        )
+def init_app() -> None:
+    init()
+    if DEMO_MODE:
+        seed("demo")
 
 
-def _base_context(extra: Dict[str, Any] | None = None) -> Dict[str, Any]:
-    payload: Dict[str, Any] = {
-        "is_production": config.IS_PRODUCTION,
-        "demo_mode": config.DEMO_MODE,
-        "inference_backend": config.INFERENCE_BACKEND,
-    }
-    if extra:
-        payload.update(extra)
-    return payload
-
-
-async def warm_ollama() -> None:
-    """Pull required models on Cloud Run if missing. Safe and idempotent."""
-    if config.INFERENCE_BACKEND != "ollama":
-        return
-
-    models_needed = list({config.SCOUT_MODEL, config.SAGE_MODEL})
-    headers = {"Authorization": f"Bearer {config.OLLAMA_AUTH_TOKEN}"} if config.OLLAMA_AUTH_TOKEN else {}
-
-    for model in models_needed:
-        try:
-            async with httpx.AsyncClient(timeout=600.0) as client:
-                await client.post(
-                    f"{config.OLLAMA_BASE_URL}/api/pull",
-                    json={"name": model},
-                    headers=headers,
-                )
-        except Exception as exc:
-            logger.warning("[warm_ollama] Failed to pull %s: %s", model, exc)
-
-
-async def _periodic_sync_worker():
-    while True:
-        try:
-            await asyncio.get_event_loop().run_in_executor(
-                None, send_weekly_payload
-            )
-            await asyncio.get_event_loop().run_in_executor(
-                None, retry_pending_sync
-            )
-        except Exception as e:
-            logger.error("[sync] periodic sync failed: %s", e)
-        await asyncio.sleep(6 * 60 * 60)
-
-
-async def _sweep_overdue_sessions():
-    """
-    Startup sweep: any sessions that passed their 24-hour deadline while the
-    server was offline are force-unlocked immediately. Pending sessions that
-    are still within their window get a new asyncio task for the remaining time.
-    """
-    overdue = db.get_pending_sessions_past_deadline()
-    for session in overdue:
-        logger.info(f"[startup_sweep] Auto-submitting overdue session {session['session_id']}")
-        if session.get("course_id") and session.get("attachment_id") and session.get("submission_id"):
-            try:
-                await classroom_client.patch_submission_state(
-                    course_id=session["course_id"],
-                    coursework_id=session["assignment_id"],
-                    attachment_id=session["attachment_id"],
-                    submission_id=session["submission_id"],
-                    student_id=session["student_id"],
-                    state=classroom_client.STATE_TURNED_IN,
-                )
-            except Exception as e:
-                logger.error(f"[startup_sweep] Classroom API error for {session['session_id']}: {e}")
-        db.update_session_status(session["session_id"], "auto_submitted")
-
-    logger.info(f"[startup_sweep] Processed {len(overdue)} overdue session(s).")
-
-
-@asynccontextmanager
-async def lifespan(app_instance: FastAPI):
-    # ── Startup ──────────────────────────────────────────────────────────────
-    db.init_db()
-    db.run_migrations()
-    generate_device_key_if_missing()
-    _log_startup_config_warnings()
-    if config.DEMO_MODE:
-        db.seed_demo_data_if_empty()
-    config.load_runtime_llm_config(db.get_llm_settings())
-    # All heavy work deferred to background tasks so the port is
-    # immediately available for Render's port scanner / health check.
-    async def _deferred_startup():
-        await asyncio.sleep(2)  # let the server fully bind first
-        try:
-            await _sweep_overdue_sessions()
-        except Exception as exc:
-            logger.warning("[startup] sweep failed: %s", exc)
-        asyncio.create_task(warm_ollama())
-        orchestrator.start_scout_loop()
-
-    app_instance.state.sync_task = asyncio.create_task(_periodic_sync_worker())
-    app_instance.state.orchestrator = orchestrator
-    asyncio.create_task(_deferred_startup())
-    yield
-    # ── Shutdown ─────────────────────────────────────────────────────────────
-    task = getattr(app_instance.state, "sync_task", None)
-    if task:
-        task.cancel()
-
-
-app = FastAPI(title="KnowLedge Backend", lifespan=lifespan)
-
-# Mount static and templates
+init_app()
+app = FastAPI(title="KnowLedge")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
-app.state.templates = templates  # share with routers via request.app.state
-app.state.base_template_context = _base_context()
-
-# Include routers
-app.include_router(progress.router)
-app.include_router(reports.router)
-app.include_router(ingest_router)
-app.include_router(classroom_router)
-
-# Orchestrator (starts Scout background loop)
-orchestrator = Orchestrator()
 
 
-# ── Pydantic models ───────────────────────────────────────────────────────────
-
-class ScoutRequest(BaseModel):
-    text: str
-    session_id: str | None = None
-    student_id: str | None = None
-
-class SageRequest(BaseModel):
-    concept: str
-    chat_history: List[Dict[str, str]]
-    session_id: str | None = None
-    student_id: str | None = None
-    temporal_fingerprint: Dict[str, Any] | None = None
+def get_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
-class ProbeRequest(BaseModel):
-    session_id: str
-    concept: str
-    student_response: str
-    difficulty: str = "medium"
-    artifact_context: str | None = None
-    history_turns: int = 6
+def get_student_id(request: Request) -> str:
+    return (request.cookies.get("student_id") or "default").strip() or "default"
 
 
-class SessionEventRequest(BaseModel):
-    session_id: str
-    concept: str
-    event_type: str
-
-class MarkOwnedRequest(BaseModel):
-    concept: str
-
-
-class LLMConfigRequest(BaseModel):
-    ollama_base_url: str | None = None
-    ollama_host: str | None = None
-    scout_model: str
-    sage_model: str
-    lens_model: str
+def render_page(request: Request, template_name: str, extra: dict | None = None):
+    context = {
+        "request": request,
+        "demo_mode": DEMO_MODE,
+        "default_ollama_url": DEFAULT_OLLAMA_URL,
+        "student_id": get_student_id(request),
+    }
+    if extra:
+        context.update(extra)
+    return templates.TemplateResponse(request, template_name, context)
 
 
-class SoloStartRequest(BaseModel):
-    concept: str
-
-
-class SoloEvaluateRequest(BaseModel):
-    concept: str
-    session_id: str
-    response: str
-
-
-def _resolve_db_session_id(session_id: str) -> int | None:
-    raw = (session_id or "").strip()
-    if not raw:
-        return None
-    if raw.isdigit():
-        return int(raw)
-    alias = db.get_db_session_id_from_alias(raw)
-    if alias is not None:
-        return int(alias)
-    return None
-
-
-def _format_prior_conversation(turns: list[dict[str, Any]]) -> str:
-    if not turns:
-        return ""
-
-    lines = ["[PRIOR CONVERSATION]"]
-    idx = 1
-    for turn in turns:
-        question = (turn.get("sage_question") or "").strip()
-        response = (turn.get("student_response") or "").strip()
-        if not question or not response:
-            continue
-        lines.append(f"Turn {idx} - Sage: {question}")
-        lines.append(f"Turn {idx} - Student: {response}")
-        idx += 1
-
-    if idx == 1:
-        return ""
-    lines.append("[END PRIOR CONVERSATION]")
-    return "\n".join(lines)
-
-
-# ── Page Routes ───────────────────────────────────────────────────────────────
-
-@app.get("/")
-async def root():
+@app.get("/", response_class=HTMLResponse)
+def root():
     return RedirectResponse(url="/ledger")
 
+
 @app.get("/ledger", response_class=HTMLResponse)
-async def read_ledger(request: Request):
-    debts = db.get_all_active_debt(include_legacy=False)
-    heatmap = db.get_class_heatmap(include_legacy=False)
-    return templates.TemplateResponse(request, "ledger.html", _base_context({
-        "debts_json": json.dumps(debts),
-        "heatmap_json": json.dumps(heatmap)
-    }))
+def ledger_page(request: Request):
+    return render_page(request, "ledger.html")
+
+
+@app.get("/progress", response_class=HTMLResponse)
+def progress_page(request: Request):
+    return render_page(request, "progress.html")
+
+
+@app.get("/reports", response_class=HTMLResponse)
+def reports_page(request: Request):
+    return render_page(request, "reports.html")
+
 
 @app.get("/help", response_class=HTMLResponse)
-async def read_help(request: Request):
-    return templates.TemplateResponse(request, "help.html", _base_context())
-
-
-@app.get("/health")
-async def health():
-    return {
-        "status": "ok",
-        "environment": config.ENVIRONMENT,
-        "inference_backend": config.INFERENCE_BACKEND,
-    }
-
-
-@app.get("/api/model-status")
-async def model_status():
-    """Lightweight endpoint polled by the nav bar status indicator."""
-    try:
-        reachable = await check_health()
-        return {
-            "ready": reachable,
-            "model": config.SAGE_MODEL,
-            "backend": config.INFERENCE_BACKEND,
-        }
-    except Exception:
-        return {"ready": False, "model": config.SAGE_MODEL, "backend": config.INFERENCE_BACKEND}
+def help_page(request: Request):
+    return render_page(request, "help.html")
 
 
 @app.get("/demo")
-async def demo_redirect():
-    """Seeds demo data and redirects to ledger with demo mode active."""
-    db.seed_demo_data_if_empty()
-    response = RedirectResponse(url="/ledger?tour=1")
-    response.set_cookie("demo_mode", "true", max_age=60 * 60 * 24 * 30, samesite="lax")
+def demo_route():
+    seed("demo")
+    response = RedirectResponse(url="/ledger")
+    response.set_cookie("student_id", "demo", samesite="lax")
     return response
 
 
-@app.post("/reset-demo")
-async def reset_demo():
-    """Wipes all debt_log rows and re-seeds demo data."""
-    db.clear_demo_data()
+@app.get("/health")
+def health():
     return {"status": "ok"}
 
 
-@app.get("/api/warmup")
-async def warmup():
-    """Fire-and-forget warmup endpoint to reduce first-judge latency."""
-    asyncio.create_task(check_health())
-    return {"status": "warming"}
+@app.get("/api/status")
+def status(ollama_url: str = Query(DEFAULT_OLLAMA_URL)):
+    return ollama_client.is_ready(ollama_url)
 
 
-# ── Agent API Endpoints ───────────────────────────────────────────────────────
-
-@app.get("/api/state")
-async def get_state():
-    debts = db.get_all_active_debt(include_legacy=False)
-    heatmap = db.get_class_heatmap(include_legacy=False)
-    return {"debts": debts, "heatmap": heatmap}
-
-
-@app.get("/api/events")
-async def get_events(limit: int = Query(50, ge=1, le=500)):
-    events = []
-    while len(events) < limit:
-        try:
-            events.append(orchestrator.event_bus.get_nowait())
-        except queue.Empty:
-            break
-    return events
-
-
-@app.get("/api/debt-score")
-async def get_debt_score():
-    """
-    Computes the live debt score:
-      score = (on_loan + persists) / total_active * 100
-    Returns 0 when no debt entries exist.
-    """
-    debts = db.get_all_active_debt(include_legacy=False)
-    total = len(debts)
-    if total == 0:
-        return {"score": 0, "on_loan": 0, "persists": 0, "clear": 0, "total": 0}
-    active = sum(1 for d in debts if d["status"] in ("on_loan", "persists"))
-    clear  = sum(1 for d in debts if d["status"] in ("clear", "owned"))
-    score  = round(active / total * 100)
-    return {"score": score, "on_loan": sum(1 for d in debts if d["status"] == "on_loan"),
-            "persists": sum(1 for d in debts if d["status"] == "persists"),
-            "clear": clear, "total": total}
+@app.get("/api/concepts")
+def get_concepts(student_id: str = "default", db=Depends(get_db)):
+    rows = db.execute(
+        """SELECT id, name, status, confidence, subject,
+                  last_seen, created_at, cleared_at
+           FROM concepts
+           WHERE student_id=?
+           ORDER BY
+             CASE status
+               WHEN 'persists' THEN 1
+               WHEN 'on-loan'  THEN 2
+               WHEN 'clear'    THEN 3
+             END,
+             created_at DESC""",
+        [student_id],
+    ).fetchall()
+    return {"concepts": [dict(r) for r in rows]}
 
 
-@app.get("/api/llm/config")
-async def get_llm_config():
-    runtime = config.get_runtime_llm_config()
-    models = config.fetch_ollama_models(runtime["ollama_base_url"]) if config.INFERENCE_BACKEND == "ollama" else []
-    return {
-        **runtime,
-        "available_models": models
-    }
+@app.get("/api/progress/summary")
+def progress_summary(student_id: str = "default", db=Depends(get_db)):
+    concepts = db.execute(
+        "SELECT * FROM concepts WHERE student_id=?",
+        [student_id],
+    ).fetchall()
 
+    total = len(concepts)
+    on_loan = [c for c in concepts if c["status"] == "on-loan"]
+    clear = [c for c in concepts if c["status"] == "clear"]
+    persists = [c for c in concepts if c["status"] == "persists"]
+    debt = round((len(on_loan) + len(persists)) / total * 100) if total > 0 else 0
 
-@app.get("/api/llm/models")
-async def get_llm_models(host: str = Query(None)):
-    target_host = host or config.OLLAMA_BASE_URL
-    models = config.fetch_ollama_models(target_host)
-    return {"host": target_host, "models": models}
-
-
-@app.post("/api/llm/config")
-async def update_llm_config(req: LLMConfigRequest):
-    base_url = (req.ollama_base_url or req.ollama_host or "").strip()
-    if not base_url:
-        raise HTTPException(status_code=400, detail="Ollama host is required")
-    if not req.scout_model.strip() or not req.sage_model.strip() or not req.lens_model.strip():
-        raise HTTPException(status_code=400, detail="All model fields are required")
-
-    updated = config.set_runtime_llm_config(
-        ollama_base_url=base_url,
-        scout_model=req.scout_model,
-        sage_model=req.sage_model,
-        lens_model=req.lens_model,
-    )
-    db.save_llm_settings(
-        ollama_base_url=updated["ollama_base_url"],
-        scout_model=updated["scout_model"],
-        sage_model=updated["sage_model"],
-        lens_model=updated["lens_model"],
-    )
-    models = config.fetch_ollama_models(updated["ollama_base_url"])
-    return {
-        "status": "ok",
-        **updated,
-        "available_models": models
-    }
-
-@app.post("/api/scout")
-async def trigger_scout(req: ScoutRequest):
-    if not req.text.strip():
-        raise HTTPException(status_code=400, detail="Empty text")
-
-    student_id = (req.student_id or "anonymous").strip() or "anonymous"
-    db_session_id = db.get_or_create_learning_session(student_id, "scout_ingest")
-    if req.session_id:
-        db.set_session_alias(req.session_id, db_session_id)
-    logger.info("[scout] client_session_id=%s resolved_db_session_id=%s", req.session_id, db_session_id)
-    print(f"[scout] ingest start client_session_id={req.session_id} db_session_id={db_session_id} text_len={len(req.text)}")
-
-    # Process inline so UI refresh sees updates immediately.
-    concepts = tag_content(req.text)
-    print(f"[scout] extracted concepts={[c.concept_tag for c in concepts]}")
-    inserted = 0
-    inserted_concepts: list[str] = []
-    seen = set()
-    for concept in concepts:
-        concept_name = (concept.concept_tag or "").strip()
-        if not concept_name:
-            continue
-        key = concept_name.lower()
-        if key in seen:
-            continue
-        seen.add(key)
-
-        confidence = float(max(0.0, min(1.0, concept.confidence_score)))
-        db.insert_debt(concept_name, req.text, confidence)
-        logger.info("[scout] inserted debt concept=%s confidence=%.2f session=%s", concept_name, confidence, db_session_id)
-        orchestrator.event_bus.put({"type": "DEBT_ADDED", "concept": concept_name})
-        inserted += 1
-        inserted_concepts.append(concept_name)
-
-    seeded = db.seed_pending_concepts_from_scout(
-        session_id=db_session_id,
-        concepts=inserted_concepts,
-        raw_content=req.text,
-    )
-    print(f"[scout] seeded concept_scores={seeded}")
-
-    return {
-        "status": "ok",
-        "inserted": inserted,
-        "concepts": inserted_concepts,
-        "seeded_concepts": seeded,
-        "session_id": req.session_id,
-        "db_session_id": db_session_id,
-    }
-
-
-@app.get("/concepts/{session_id}")
-async def get_session_concepts(session_id: str):
-    resolved = _resolve_db_session_id(session_id)
-    logger.info("[concepts] requested_session_id=%s resolved_db_session_id=%s", session_id, resolved)
-    if resolved is None:
-        return {"session_id": session_id, "concepts": []}
-    concepts = db.get_concepts_for_session(resolved)
-    return {"session_id": session_id, "db_session_id": resolved, "concepts": concepts}
-
-@app.post("/api/sage/turn")
-async def trigger_sage(req: SageRequest):
-    """Synchronous Sage turn — used by the standalone dashboard modal."""
-    try:
-        concept = (req.concept or "").strip()
-        if not concept:
-            raise HTTPException(status_code=400, detail="Concept is required")
-
-        student_id = (req.student_id or "anonymous").strip() or "anonymous"
-        db_session_id = db.get_or_create_learning_session(student_id, concept)
-        if req.session_id:
-            db.set_session_alias(req.session_id, db_session_id)
-
-        if req.temporal_fingerprint:
-            temporal_breakdown = score_temporal_fingerprint_with_breakdown(req.temporal_fingerprint)
-            temporal_score = float(temporal_breakdown["score"])
-            db.update_comprehension_score(
-                session_id=db_session_id,
-                concept=concept,
-                new_signal={"temporal_score": temporal_score},
-            )
-            db.log_audit_event(
-                event_type="temporal_score",
-                session_id=str(db_session_id),
-                student_id=student_id,
-                concept=concept,
-                inputs=req.temporal_fingerprint,
-                decision=temporal_breakdown,
-            )
-
-        pending_traps = db.get_pending_wrong_traps(str(db_session_id), concept)
-        latest_student_text = ""
-        for msg in reversed(req.chat_history):
-            if (msg.get("role") or "").lower() in {"user", "student"}:
-                latest_student_text = (msg.get("content") or "").strip().lower()
-                break
-
-        if pending_traps and latest_student_text:
-            agreed = any(token in latest_student_text for token in ("yes", "correct", "right", "exactly"))
-            corrected = any(token in latest_student_text for token in ("no", "not", "incorrect", "actually", "instead"))
-            trap_score = 0.0 if agreed and not corrected else 1.0
-            for trap in pending_traps:
-                db.resolve_probe(trap["id"], student_corrected=(trap_score >= 0.99))
-            db.update_comprehension_score(
-                session_id=db_session_id,
-                concept=concept,
-                new_signal={"trap_score": trap_score},
-            )
-            db.log_audit_event(
-                event_type="wrong_trap_resolution",
-                session_id=str(db_session_id),
-                student_id=student_id,
-                concept=concept,
-                inputs={"latest_student_text": latest_student_text, "pending_traps": len(pending_traps)},
-                decision={"trap_score": trap_score},
-            )
-
-        result = orchestrator.trigger_clearing(
-            concept,
-            req.chat_history,
-            session_id=req.session_id,
-            student_id=student_id,
-            db_session_id=db_session_id,
-        )
-        direct_answer_score = 0.85 if result.cleared else 0.45
-        probe_depth_score = min(1.0, max(0.1, len(req.chat_history) / 4.0))
-        comprehension = db.update_comprehension_score(
-            session_id=db_session_id,
-            concept=concept,
-            new_signal={
-                "direct_answer_score": direct_answer_score,
-                "probe_depth_score": probe_depth_score,
-            },
-        )
-        db.log_audit_event(
-            event_type="comprehension_update",
-            session_id=str(db_session_id),
-            student_id=student_id,
-            concept=concept,
-            inputs={"direct_answer_score": direct_answer_score, "probe_depth_score": probe_depth_score},
-            decision=comprehension,
-        )
-        return {"cleared": result.cleared, "response": result.response}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/sage/probe")
-async def create_probe(req: ProbeRequest):
-    history_limit = max(1, min(12, int(req.history_turns or 6)))
-    db.update_last_probe_turn_response(req.session_id, req.concept, req.student_response)
-    recent_turns = db.get_recent_probe_turns(req.session_id, req.concept, limit=history_limit)
-    history_block = _format_prior_conversation(recent_turns)
-
-    asked_questions = db.get_asked_questions(req.session_id, req.concept)
-    resolved_db_session_id = _resolve_db_session_id(req.session_id)
-    if resolved_db_session_id is None:
-        resolved_db_session_id = db.get_or_create_learning_session("anonymous", req.concept)
-        db.set_session_alias(req.session_id, resolved_db_session_id)
-
-    temporal_score = None
-    current = db.get_concept_score(resolved_db_session_id, req.concept) or {}
-    temporal_score = current.get("temporal_score")
-
-    response_signal = classify_student_response(req.student_response, temporal_score=temporal_score)
-    probe_data = generate_probe(
-        student_response=req.student_response,
-        concept=req.concept,
-        artifact_context=req.artifact_context,
-        difficulty=req.difficulty,
-        conversation_history_block=history_block,
-        asked_questions=asked_questions,
-        max_regeneration_attempts=3,
-        response_signal=response_signal,
-    )
-    probe_id = db.register_probe(req.session_id, req.concept, probe_data["strategy"], probe_data["probe"])
-    db.append_asked_question(req.session_id, req.concept, probe_data["probe"])
-    db.record_probe_turn(req.session_id, req.concept, probe_data["probe"], "")
-
-    signal_to_direct = {
-        "STRUGGLING": 0.35,
-        "CONFIDENT": 0.75,
-        "UNCERTAIN": 0.4,
-        "SUSPICIOUS": 0.3,
-    }
-    exchange_count = len([t for t in recent_turns if (t.get("student_response") or "").strip()])
-    probe_depth = min(1.0, max(0.1, (exchange_count + 1) / 4.0))
-    comprehension = db.update_comprehension_score(
-        session_id=resolved_db_session_id,
-        concept=req.concept,
-        new_signal={
-            "direct_answer_score": signal_to_direct.get(str(response_signal), 0.5),
-            "probe_depth_score": probe_depth,
-            "temporal_score": 0.5 if temporal_score is None else float(temporal_score),
-            "trap_score": 0.5,
-        },
-    )
-    db.log_audit_event(
-        event_type="probe_generated",
-        session_id=req.session_id,
-        student_id=None,
-        concept=req.concept,
-        inputs={
-            "difficulty": req.difficulty,
-            "artifact_context": bool(req.artifact_context),
-            "student_response_length": len(req.student_response or ""),
-            "response_signal": response_signal,
-            "history_turns_used": exchange_count,
-        },
-        decision={
-            "probe_id": probe_id,
-            "strategy": probe_data["strategy"],
-            "probe": probe_data["probe"],
-            "true_comprehension": comprehension.get("true_comprehension"),
-            "status": comprehension.get("status"),
-        },
-    )
-    return {
-        "probe": probe_data["probe"],
-        "strategy": probe_data["strategy"],
-        "probe_id": probe_id,
-        "response_signal": response_signal,
-    }
-
-
-@app.post("/api/sage/session-event")
-async def record_sage_session_event(req: SessionEventRequest):
-    event = (req.event_type or "").strip().lower()
-    session_id = (req.session_id or "").strip()
-    concept = (req.concept or "").strip()
-    if not session_id or not concept:
-        raise HTTPException(status_code=400, detail="session_id and concept are required")
-
-    penalized = 0
-    if event == "close":
-        resolved_session_id = session_id
-        if not session_id.isdigit():
-            alias = db.get_db_session_id_from_alias(session_id)
-            if alias is not None:
-                resolved_session_id = str(alias)
-        penalized = db.penalize_open_interrupts_for_session(resolved_session_id)
-
-    db.log_audit_event(
-        event_type="session_event",
-        session_id=session_id,
-        student_id=None,
-        concept=concept,
-        inputs={"event_type": event},
-        decision={"penalized_interrupts": penalized},
-    )
-    return {"status": "ok", "penalized_interrupts": penalized}
-
-
-@app.post("/api/sage/start-solo")
-async def start_solo(req: SoloStartRequest):
-    concept = (req.concept or "").strip()
-    if not concept:
-        raise HTTPException(status_code=400, detail="Concept is required")
-
-    prior = db.get_prior_solo_questions(concept)
-    question = generate_solo_question(concept, prior)
-    session_id = f"solo-{uuid.uuid4().hex[:10]}"
-    started_at = datetime.utcnow()
-    expires_at = started_at + timedelta(seconds=config.SOLO_TIMEOUT_SECONDS)
-    db.create_solo_session(
-        session_id=session_id,
-        concept=concept,
-        question=question,
-        started_at=started_at.isoformat(),
-        expires_at=expires_at.isoformat(),
-    )
-    return {
-        "session_id": session_id,
-        "concept": concept,
-        "question": question,
-        "expires_at": expires_at.isoformat(),
-    }
-
-
-@app.post("/api/sage/solo-evaluate")
-async def solo_evaluate(req: SoloEvaluateRequest):
-    concept = (req.concept or "").strip()
-    if not concept:
-        raise HTTPException(status_code=400, detail="Concept is required")
-    if not req.session_id.strip():
-        raise HTTPException(status_code=400, detail="session_id is required")
-    if not req.response.strip():
-        raise HTTPException(status_code=400, detail="response is required")
-
-    result = orchestrator.trigger_solo_mode(concept, req.response, req.session_id)
-    return result
-
-@app.post("/api/sage/mark-owned")
-async def mark_sage_owned(req: MarkOwnedRequest):
-    concept = (req.concept or "").strip()
-    if not concept:
-        raise HTTPException(status_code=400, detail="Empty concept")
-    updated = db.update_status(concept, "clear")
-    return {"status": "ok", "updated": updated}
-
-@app.get("/api/sage/stream")
-async def sage_stream_endpoint(
-    request: Request,
-    session_id: str = Query(...),
-    history: str = Query("[]"),
-    concept: str = Query(None),  # optional: passed directly from ledger modal
-):
-    """
-    SSE streaming endpoint for both:
-      - Ledger modal (concept passed as query param)
-      - Classroom iframe (concept resolved from classroom_session via session_id)
-
-    Streams Sage tokens as `data: {"token": "..."}` events.
-    Sage is grounded via RAG against the US Curriculum Guide vectorstore.
-    Sends `data: {"status": "cleared"}` or `data: {"status": "complete"}` at end.
-    """
-    try:
-        chat_history = json.loads(history)
-    except Exception:
-        chat_history = []
-
-    async def event_generator():
-        cleared = False
-        async for token in run_sage_ollama(session_id, chat_history, concept=concept):
-            if await request.is_disconnected():
-                break
-            if token == "\n__CLEARED__":
-                cleared = True
-                continue
-            yield f"data: {json.dumps({'token': token})}\n\n"
-        if cleared:
-            yield f"data: {json.dumps({'status': 'cleared'})}\n\n"
-        else:
-            yield f"data: {json.dumps({'status': 'complete'})}\n\n"
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        }
-    )
-
-@app.post("/api/lens/verify")
-async def trigger_lens(concept: str = Form(...), file: UploadFile = File(...)):
-    mime_type = (file.content_type or "").strip().lower()
-    if mime_type not in ALLOWED_LENS_MIME_TYPES:
-        raise HTTPException(status_code=400, detail="Lens supports images (JPG, PNG, WEBP) and PDF files.")
-
-    try:
-        image_bytes = await file.read()
-        if not image_bytes:
-            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
-        result = orchestrator.trigger_lens_check(image_bytes, concept, mime_type=mime_type)
-        return {
-            "x": result.x, "y": result.y,
-            "width": result.width, "height": result.height,
-            "explanation": result.explanation,
-            "handwritten": result.handwritten,
-            "has_issue": result.has_issue,
-            "confidence": result.confidence,
-        }
-    except HTTPException:
-        raise
-    except ValueError as ve:
-        raise HTTPException(status_code=400, detail=str(ve))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/lens/analyze")
-async def analyze_lens(file: UploadFile = File(...), concept: str = Form(None)):
-    mime_type = (file.content_type or "").strip().lower()
-    if mime_type not in ALLOWED_LENS_MIME_TYPES:
-        raise HTTPException(status_code=400, detail="Lens supports images (JPG, PNG, WEBP) and PDF files.")
-
-    contents = await file.read()
-    if not contents:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
-
-    try:
-        return analyze_document(contents, (concept or "").strip(), mime_type)
-    except ValueError as ve:
-        raise HTTPException(status_code=400, detail=str(ve))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/verify-diagram")
-async def verify_diagram(
-    image: UploadFile = File(...),
-    concept: str = Form(...),
-    expected_elements: List[str] = Form(...),
-):
-    raw_elements: List[str] = expected_elements or []
-    if len(raw_elements) == 1:
-        candidate = (raw_elements[0] or "").strip()
-        if candidate.startswith("[") and candidate.endswith("]"):
+    days_list = []
+    for concept in clear:
+        if concept["cleared_at"] and concept["created_at"]:
             try:
-                parsed = json.loads(candidate)
-                if isinstance(parsed, list):
-                    raw_elements = [str(x) for x in parsed]
+                d1 = datetime.fromisoformat(concept["created_at"])
+                d2 = datetime.fromisoformat(concept["cleared_at"])
+                days_list.append((d2 - d1).days)
             except Exception:
                 pass
+    avg_days = round(sum(days_list) / len(days_list), 1) if days_list else 0.0
 
-    image_bytes = await image.read()
-    if not image_bytes:
-        raise HTTPException(status_code=400, detail="Image is empty")
+    sessions = db.execute(
+        """SELECT date(ended_at) as day
+           FROM sessions
+           WHERE student_id=? AND outcome='cleared'
+           GROUP BY date(ended_at)
+           ORDER BY day DESC""",
+        [student_id],
+    ).fetchall()
+    streak = 0
+    today = date.today()
+    for i, row in enumerate(sessions):
+        expected = (today - timedelta(days=i)).isoformat()
+        if row["day"] == expected:
+            streak += 1
+        else:
+            break
 
-    image_b64 = base64.b64encode(image_bytes).decode("utf-8")
-    expected_text = ", ".join(raw_elements)
-    prompt = (
-        "You are verifying a student-submitted diagram photo. Return strict JSON with keys: "
-        "verified (bool), elements_found (array of strings), is_likely_handwritten (bool), confidence (0..1). "
-        "Assess whether this looks hand-drawn on paper (imperfect lines, shadows, texture) and not a clean digital screenshot. "
-        "If it looks digital, set is_likely_handwritten=false and reduce confidence. "
-        f"Concept: {concept}. Expected elements: {expected_text}."
-    )
-
-    model_response = await chat_async(
-        model=config.LENS_MODEL,
-        messages=[
-            {
-                "role": "user",
-                "content": prompt,
-                "images": [image_b64],
-            }
-        ],
-        format="json",
-    )
-    content = (model_response.get("message", {}) or {}).get("content", "")
-
-    from .lens import _parse_json_payload
-    parsed = _parse_json_payload(content)
-    if not parsed:
-        logger.error("verify_diagram: failed to parse model response: %s", content[:300])
-        parsed = {
-            "verified": False,
-            "elements_found": [],
-            "is_likely_handwritten": False,
-            "confidence": 0.2,
+    concept_list = [
+        {
+            "name": c["name"],
+            "confidence": c["confidence"] or 0.0,
+            "status": c["status"],
         }
+        for c in sorted(concepts, key=lambda x: x["confidence"] or 0, reverse=True)
+    ]
 
-    verified = bool(parsed.get("verified", False))
-    elements_found = parsed.get("elements_found", []) or []
-    is_likely_handwritten = bool(parsed.get("is_likely_handwritten", False))
-    confidence = float(parsed.get("confidence", 0.0) or 0.0)
-    confidence = max(0.0, min(1.0, confidence))
-    if not is_likely_handwritten:
-        confidence = min(confidence, 0.35)
-        verified = False
+    history = db.execute(
+        """SELECT date(ended_at) as day,
+                  COUNT(*) as cleared_count
+           FROM sessions
+           WHERE student_id=? AND outcome='cleared'
+             AND ended_at >= date('now','-30 days')
+           GROUP BY date(ended_at)
+           ORDER BY day""",
+        [student_id],
+    ).fetchall()
 
-    db_session_id = db.get_or_create_learning_session("anonymous", concept.strip())
-    comprehension = db.update_comprehension_score(
-        session_id=db_session_id,
-        concept=concept.strip(),
-        new_signal={"verification_signal": confidence if verified else 0.0},
+    return {
+        "debt_score": debt,
+        "cleared_month": len(clear),
+        "avg_days": avg_days,
+        "streak": streak,
+        "total": total,
+        "on_loan": len(on_loan),
+        "persists": len(persists),
+        "concepts": concept_list,
+        "debt_history": [dict(h) for h in history],
+    }
+
+
+@app.post("/api/scout")
+def scout(body: dict, db=Depends(get_db)):
+    content = (body.get("content") or "").strip()
+    if not content:
+        return {"concepts": []}
+
+    base_url = body.get("ollama_url", DEFAULT_OLLAMA_URL)
+    raw = ollama_client.chat(
+        system=SCOUT_SYSTEM,
+        user=f"Extract concepts from this study content:\n\n{content}",
+        base_url=base_url,
+        temperature=0.3,
     )
-    db.log_audit_event(
-        event_type="diagram_verification",
-        session_id=str(db_session_id),
-        student_id="anonymous",
-        concept=concept.strip(),
-        inputs={"expected_elements": raw_elements},
-        decision={
-            "verified": verified,
-            "elements_found": elements_found,
-            "is_likely_handwritten": is_likely_handwritten,
-            "confidence": confidence,
-            "comprehension_status": comprehension.get("status"),
-        },
+
+    try:
+        concepts = ollama_client.extract_json(raw)
+        if not isinstance(concepts, list):
+            concepts = list(concepts.values()) if isinstance(concepts, dict) else []
+    except ValueError:
+        concepts = [
+            c.strip().strip('"').strip("'")
+            for c in re.split(r"[\n,]", raw)
+            if c.strip() and len(c.strip()) > 2
+        ][:8]
+
+    student_id = body.get("student_id", "default")
+    session_id = body.get("session_id", str(uuid.uuid4()))
+    inserted = []
+    for concept in concepts[:8]:
+        row = db.execute(
+            """SELECT id, name, status, confidence, subject,
+                      last_seen, created_at, cleared_at
+               FROM concepts
+               WHERE student_id=? AND lower(name)=lower(?)
+               ORDER BY created_at DESC
+               LIMIT 1""",
+            [student_id, concept],
+        ).fetchone()
+        if row:
+            db.execute(
+                "UPDATE concepts SET last_seen=datetime('now') WHERE id=?",
+                [row["id"]],
+            )
+            refreshed = dict(row)
+            refreshed["last_seen"] = datetime.now().isoformat()
+            inserted.append(refreshed)
+            continue
+
+        cid = str(uuid.uuid4())
+        db.execute(
+            """INSERT INTO concepts
+               (id, student_id, name, status, confidence,
+                created_at, last_seen)
+               VALUES (?,?,?,'on-loan',0.0,datetime('now'),
+               datetime('now'))""",
+            [cid, student_id, concept],
+        )
+        row = db.execute(
+            """SELECT id, name, status, confidence, subject,
+                      last_seen, created_at, cleared_at
+               FROM concepts
+               WHERE id=?""",
+            [cid],
+        ).fetchone()
+        if row:
+            inserted.append(dict(row))
+    db.commit()
+    return {"concepts": inserted, "session_id": session_id}
+
+
+@app.post("/api/sage")
+def sage(body: dict, db=Depends(get_db)):
+    concept = body.get("concept", "")
+    history = body.get("history", [])
+    student_msg = body.get("message", "")
+    concept_id = body.get("concept_id", "")
+    student_id = body.get("student_id", "default")
+    base_url = body.get("ollama_url", DEFAULT_OLLAMA_URL)
+
+    history_text = "\n".join(
+        f"{'Sage' if m['role'] == 'assistant' else 'Student'}: {m['content']}"
+        for m in history[-6:]
     )
 
-    return {
-        "verified": verified,
-        "elements_found": elements_found,
-        "is_likely_handwritten": is_likely_handwritten,
-        "confidence": confidence,
-    }
+    system = SAGE_SYSTEM.format(
+        concept=concept,
+        history=history_text or "No prior exchanges yet.",
+    )
+
+    raw = ollama_client.chat(
+        system=system,
+        user=student_msg,
+        base_url=base_url,
+        temperature=0.8,
+    )
+
+    cleared = False
+    confidence = None
+    try:
+        result = ollama_client.extract_json(raw)
+        if isinstance(result, dict) and result.get("verdict") == "CLEARED":
+            cleared = True
+            confidence = result.get("confidence", 0.85)
+            reply = "✓ You've demonstrated real understanding. This concept is now yours."
+        else:
+            reply = raw
+    except ValueError:
+        reply = raw
+
+    if cleared and concept_id:
+        db.execute(
+            """UPDATE concepts
+               SET status='clear',
+                   confidence=?,
+                   cleared_at=datetime('now'),
+                   last_seen=datetime('now')
+               WHERE id=?""",
+            [confidence, concept_id],
+        )
+        db.commit()
+        db.execute(
+            """INSERT INTO sessions
+               (id, student_id, concept_id, concept_name,
+                outcome, ended_at)
+               VALUES (?,?,?,?,'cleared',datetime('now'))""",
+            [str(uuid.uuid4()), student_id, concept_id, concept],
+        )
+        db.commit()
+
+    return {"reply": reply, "cleared": cleared, "confidence": confidence}
 
 
-@app.post("/api/sync/share-weekly")
-async def sync_share_weekly():
-    return send_weekly_payload()
+@app.post("/api/lens")
+async def lens(
+    file: UploadFile = File(...),
+    concept: str = Form(""),
+    student_id: str = Form("default"),
+    ollama_url: str = Form(DEFAULT_OLLAMA_URL),
+    db=Depends(get_db),
+):
+    contents = await file.read()
+    images_b64 = []
+
+    if file.content_type == "application/pdf":
+        try:
+            import fitz
+        except ModuleNotFoundError as exc:
+            raise RuntimeError("PDF support requires pymupdf/fitz to be installed.") from exc
+        doc = fitz.open(stream=contents, filetype="pdf")
+        for i in range(min(len(doc), 3)):
+            pix = doc[i].get_pixmap(dpi=150)
+            images_b64.append(base64.b64encode(pix.tobytes("png")).decode())
+    else:
+        images_b64.append(base64.b64encode(contents).decode())
+
+    concepts_row = db.execute(
+        "SELECT name FROM concepts WHERE student_id=? AND status='on-loan' LIMIT 10",
+        [student_id],
+    ).fetchall()
+    concept_list = [r["name"] for r in concepts_row]
+
+    system = LENS_SYSTEM.format(concepts=json.dumps(concept_list))
+    raw = ollama_client.chat(
+        system=system,
+        user=(
+            "Analyze this student's handwritten work. "
+            f"They say it's about: {concept or 'general study notes'}"
+        ),
+        base_url=ollama_url,
+        images=[images_b64[0]],
+        temperature=0.4,
+    )
+
+    try:
+        result = ollama_client.extract_json(raw)
+    except ValueError:
+        result = {
+            "is_handwritten": True,
+            "reasoning_quality": "partial",
+            "concepts_found": [],
+            "gaps": ["Could not fully analyze the image"],
+            "feedback": "Image received. Try a clearer photo.",
+            "recommendation": "Good lighting and full page visible.",
+        }
+    return result
 
 
-@app.post("/api/sync/retry-pending")
-async def sync_retry_pending():
-    return retry_pending_sync()
+@app.post("/api/solo")
+def solo(body: dict):
+    concept = body.get("concept", "")
+    answer = body.get("answer", "")
+    context = body.get("context", "")
+    base_url = body.get("ollama_url", DEFAULT_OLLAMA_URL)
 
+    system = SOLO_SYSTEM.format(
+        concept=concept,
+        context=context or "No additional context provided.",
+    )
+    raw = ollama_client.chat(
+        system=system,
+        user=f"Student's answer: {answer}",
+        base_url=base_url,
+        temperature=0.3,
+    )
 
-@app.get("/api/sync/status")
-async def sync_status():
-    audit = get_sync_audit()
-    pending = db.get_pending_sync_payloads()
-    last = audit[0] if audit else None
-    return {
-        "enabled": True,
-        "course_id": config.COURSE_ID,
-        "last_sync": last,
-        "pending_count": len(pending),
-        "wifi_only": config.SYNC_ON_WIFI_ONLY,
-    }
-
-
-@app.get("/api/sync/audit")
-async def sync_audit():
-    return {"rows": get_sync_audit()}
-
-
-@app.get("/api/integrity/report")
-async def integrity_report():
-    return db.get_integrity_summary()
-
-
-@app.get("/api/comprehension/debt-report")
-async def comprehension_debt_report(student_id: str = Query(...)):
-    value = (student_id or "").strip()
-    if not value:
-        raise HTTPException(status_code=400, detail="student_id is required")
-    return {
-        "student_id": value,
-        "grouped_concepts": db.get_student_debt_report(value),
-    }
-
-
-@app.get("/api/report/before-after")
-async def report_before_after(concept: str = Query(...)):
-    if not concept.strip():
-        raise HTTPException(status_code=400, detail="concept is required")
-    return db.get_before_after(concept.strip())
+    try:
+        return ollama_client.extract_json(raw)
+    except ValueError:
+        return {
+            "score": 0.5,
+            "verdict": "PARTIAL",
+            "what_was_right": "Could not evaluate",
+            "what_was_missing": "Try again",
+            "next_step": "Rephrase your answer more concisely",
+        }
