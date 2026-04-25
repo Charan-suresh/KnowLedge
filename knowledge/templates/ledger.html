@@ -3,146 +3,93 @@
 {% block title %}Your Ledger · KnowLedge{% endblock %}
 {% block topbar_title %}Your Learning Ledger{% endblock %}
 
-{% block topbar_actions %}
-  <button class="btn-ghost" onclick="fetchState()">🔄 Refresh Data</button>
-  <button class="btn-ghost" onclick="openLlmSettings()">⚙️ LLM Settings</button>
-  <button class="btn-primary" onclick="openSoloMode()">🧘 Solo Mode</button>
-{% endblock %}
+{% block topbar_actions %}{% endblock %}
 
 {% block content %}
-<div class="stats-row">
-  <div class="stat-card amber">
-    <div class="stat-label">On Loan</div>
-    <div class="stat-val" id="stat-onloan">0</div>
-    <div class="stat-sub">concepts borrowed from AI</div>
-  </div>
-  <div class="stat-card teal">
-    <div class="stat-label">Clear</div>
-    <div class="stat-val" id="stat-owned">0</div>
-    <div class="stat-sub">cleared concepts</div>
-  </div>
-  <div class="stat-card coral">
-    <div class="stat-label">Persists</div>
-    <div class="stat-val" id="stat-persists">0</div>
-    <div class="stat-sub">needs another session</div>
-  </div>
-  <div class="stat-card ink">
-    <div class="stat-label">Debt Score</div>
-    <div class="stat-val" id="stat-debt-score">--%</div>
-    <div class="stat-sub" id="stat-debt-sub">calculating...</div>
-  </div>
-</div>
+<input type="hidden" id="current-concept" value="">
 
-<div class="grid-2col">
-  <!-- Left: Ledger -->
-  <div class="ledger-container">
-    <div class="section-header">
-      <h2>Concept Ledger</h2>
-      <span class="tag" id="ledger-tag">0 active</span>
-      <button class="btn-ghost" onclick="refreshConceptLedger()">Refresh</button>
-      <button class="btn-ghost filter-btn">Filter ▾</button>
-    </div>
-
-    <div class="ledger-card">
-      <div class="ledger-grid ledger-header">
-        <div>Concept</div>
-        <div>Status</div>
-        <div>Confidence</div>
-        <div>Last Seen</div>
-        <div></div>
-      </div>
-
-      <div id="ledger-body">
-        <!-- Dynamically populated from API/Jinja2 -->
-      </div>
-      <div id="ledger-empty-note" style="display:none; padding: 14px 18px; color: var(--ink-muted); font-size: 13px;">
-        No concepts detected yet - try pasting more detailed content.
-      </div>
-    </div>
-  </div>
-
-  <!-- Right: Panels -->
-  <div class="panel-stack">
-    <div class="panel-card">
-      <div class="panel-header">
-        <span class="panel-title">New entry</span>
-        <span class="panel-badge" id="scout-model-badge">Scout · --</span>
-      </div>
-      <a class="help-inline" href="/help#step-track">Need help with tagging?</a>
-      <textarea id="scoutInput" class="paste-area" placeholder="Paste AI-generated code or explanations here... Scout will silently extract concepts."></textarea>
-      <div class="panel-footer">
-        <span class="panel-hint">⚡ Tagged instantly · stays on your device</span>
-        <button class="btn-dark" onclick="simulateTag()">Tag concepts</button>
-      </div>
-    </div>
-
-    <div class="panel-card camera-panel">
-      <div class="panel-header">
-        <span class="panel-title">🔬 Show your work to Lens</span>
-        <span class="panel-badge vision" id="lens-model-badge">Lens · --</span>
-      </div>
-      <div class="camera-box">
-        <input type="file" id="lensInput" accept=".jpg,.jpeg,.png,.webp,.pdf" onchange="simulateLens()">
-        <span style="font-size: 28px; opacity: 0.4;">📷</span>
-        <p>Upload handwritten notes<br>or diagrams to verify.</p>
-      </div>
-    </div>
-
-    <div class="panel-card sage-card">
-      <h4>🦉 Start a Sage session</h4>
-      <p>Sage will ask you questions — not explain answers — until you can explain it yourself.</p>
-      <a class="help-inline" href="/help#step-clear">How do I clear a concept?</a>
-      <div class="sage-buttons" id="sage-quick-buttons">
-        <!-- Populated dynamically -->
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="modal-backdrop llm-config-backdrop" id="llmConfigModal">
-  <div class="modal-card llm-config-card">
-    <div class="modal-header">
-      <div class="sage-avatar">⚙️</div>
-      <div class="modal-titles">
-        <h2>LLM Configuration</h2>
-        <p>Configure Ollama host and per-agent models</p>
-      </div>
-      <button class="close-btn" id="llmCloseBtn" type="button" aria-label="Close LLM settings" onclick="event.preventDefault(); closeLlmSettingsBtn();">✕</button>
-    </div>
-
-    <div class="llm-config-body">
-      <label class="llm-field-label" for="ollamaHostInput">Ollama Server URL</label>
-      <input id="ollamaHostInput" class="modal-input" type="text" placeholder="https://ollama-xxxx.run.app">
-
-      <div class="llm-config-row">
+<div class="dashboard-grid">
+  <div class="dashboard-stack">
+    <section class="scout-box">
+      <div class="scout-header">
+        <span class="scout-icon">⚡</span>
         <div>
-          <label class="llm-field-label" for="scoutModelInput">Scout Model</label>
-          <input id="scoutModelInput" class="modal-input" type="text" placeholder="gemma4:e2b">
-        </div>
-        <div>
-          <label class="llm-field-label" for="sageModelInput">Sage Model</label>
-          <input id="sageModelInput" class="modal-input" type="text" placeholder="gemma4:e4b">
+          <div class="scout-title">Paste study content</div>
+          <div class="scout-sub">Scout will extract concepts and add them to your ledger</div>
         </div>
       </div>
+      <textarea id="scout-input" placeholder="Paste your notes, a textbook excerpt, AI-generated explanation, or code snippet..." rows="4"></textarea>
+      <div class="scout-actions">
+        <button onclick="runScout()" class="btn-primary">Extract concepts</button>
+        <span class="scout-hint">Works best with 1–3 paragraphs</span>
+      </div>
+      <div id="scout-status" class="scout-status hidden"></div>
+    </section>
 
-      <label class="llm-field-label" for="lensModelInput">Lens Model</label>
-      <input id="lensModelInput" class="modal-input" type="text" placeholder="gemma4:e4b">
+    <section class="dashboard-card">
+      <div class="ledger-header">
+        <div>
+          <h2 class="ledger-title">Concept Ledger</h2>
+          <span class="ledger-count" id="concept-count">0 concepts tracked</span>
+        </div>
+        <div class="ledger-filters">
+          <button class="filter-btn active" onclick="filterLedger('all')">All</button>
+          <button class="filter-btn" onclick="filterLedger('on-loan')">On Loan</button>
+          <button class="filter-btn" onclick="filterLedger('persists')">Persists</button>
+          <button class="filter-btn" onclick="filterLedger('clear')">Clear</button>
+        </div>
+      </div>
+      <div class="concept-list" id="concept-list"></div>
+    </section>
+  </div>
 
-      <div class="llm-model-actions">
-        <button class="btn-ghost" type="button" id="llmRefreshBtn">↻ Load Models from Host</button>
+  <div class="dashboard-stack">
+    <section class="debt-card">
+      <div class="debt-card-header">
+        <span class="debt-title">Learning Debt</span>
+        <span class="debt-score-badge" id="debt-score-badge">--%</span>
       </div>
 
-      <div class="llm-model-chip-wrap" id="llmModelChipWrap"></div>
-      <p class="llm-config-hint">Tip: click a model chip to auto-fill empty fields.</p>
-    </div>
-
-    <div class="modal-footer llm-config-footer">
-      <div id="llmConfigStatus">Runtime updates apply immediately. Settings are saved locally.</div>
-      <div class="llm-config-actions">
-        <button class="btn-ghost" type="button" id="llmCancelBtn" onclick="event.preventDefault(); closeLlmSettingsBtn();">Cancel</button>
-        <button class="btn-dark" type="button" id="saveLlmBtn" onclick="event.preventDefault(); saveLlmSettings();">Save Changes</button>
+      <div class="debt-ring-wrap">
+        <svg viewBox="0 0 120 120" class="debt-ring">
+          <circle cx="60" cy="60" r="50" fill="none" stroke="#F3F4F6" stroke-width="12"/>
+          <circle cx="60" cy="60" r="50" fill="none" stroke="#DC2626" stroke-width="12"
+                  stroke-dasharray="314" stroke-dashoffset="157" stroke-linecap="round"
+                  transform="rotate(-90 60 60)" id="debt-arc"/>
+          <text x="60" y="56" text-anchor="middle" font-size="22" font-weight="600" fill="#111827" id="debt-ring-pct">50%</text>
+          <text x="60" y="72" text-anchor="middle" font-size="10" fill="#6B7280">debt</text>
+        </svg>
       </div>
-    </div>
+
+      <div class="debt-stats">
+        <div class="debt-stat"><span class="ds-value" id="stat-loan">0</span><span class="ds-label">On Loan</span></div>
+        <div class="debt-stat"><span class="ds-value" id="stat-persists">0</span><span class="ds-label">Persists</span></div>
+        <div class="debt-stat"><span class="ds-value" id="stat-clear">0</span><span class="ds-label">Clear</span></div>
+      </div>
+
+      <div class="next-to-clear">
+        <div class="ntc-label">Priority concept</div>
+        <div class="ntc-concept" id="priority-concept">Start a session to see your priority</div>
+        <button class="btn-primary full-width" id="start-priority-session" onclick="startPrioritySession()">Clear it now →</button>
+      </div>
+    </section>
+
+    <section class="lens-card">
+      <div class="lens-header">
+        <span>🔬</span>
+        <div>
+          <div class="lens-title">Lens verification</div>
+          <div class="lens-sub">Upload handwritten notes to verify understanding</div>
+        </div>
+      </div>
+      <label class="lens-upload-area" for="lens-file-input">
+        <div class="lens-upload-icon">📷</div>
+        <div class="lens-upload-text">Drop an image or PDF here</div>
+        <div class="lens-upload-hint">JPG, PNG, WEBP, PDF — max 10MB</div>
+        <input type="file" id="lens-file-input" accept=".jpg,.jpeg,.png,.webp,.pdf" onchange="runLens(this.files[0])" style="display:none">
+      </label>
+      <div id="lens-result" class="lens-result hidden"></div>
+    </section>
   </div>
 </div>
 {% endblock %}
@@ -150,377 +97,283 @@
 {% block scripts %}
 <script>
   const initialDebts = {{ debts_json | safe }};
-  const scoutSessionId = `scout-${Date.now()}`;
-  let llmConfig = null;
-  
-  function renderLedger(debts) {
-    const tbody = document.getElementById('ledger-body');
-    tbody.innerHTML = '';
-    
-    let onLoan = 0; let persists = 0; let owned = 0;
-    
-    debts.forEach(d => {
-      if(d.status === 'on_loan') onLoan++;
-      if(d.status === 'persists') persists++;
-      if(d.status === 'clear' || d.status === 'owned') owned++;
-    });
+  const ledgerSessionId = localStorage.getItem('ledgerSessionId') || `ledger-${Date.now()}`;
+  localStorage.setItem('ledgerSessionId', ledgerSessionId);
+  const statusOrder = { 'on-loan': 0, 'persists': 1, 'clear': 2 };
+  let currentFilter = 'all';
+  let ledgerConcepts = [];
 
-    document.getElementById('stat-onloan').innerText = onLoan;
-    document.getElementById('stat-persists').innerText = persists;
-    document.getElementById('stat-owned').innerText = owned;
-    document.getElementById('ledger-tag').innerText = `${debts.length} tracked`;
+  function normalizeStatus(status) {
+    if (status === 'on_loan' || status === 'borrowed') return 'on-loan';
+    if (status === 'persists') return 'persists';
+    return 'clear';
+  }
 
-    const quickButtons = document.getElementById('sage-quick-buttons');
-    quickButtons.innerHTML = '';
+  function formatRelative(value) {
+    if (!value) return 'today';
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return 'today';
+    const delta = Math.max(0, Math.round((Date.now() - parsed.getTime()) / 86400000));
+    if (delta === 0) return 'today';
+    if (delta === 1) return '1 day ago';
+    return `${delta} days ago`;
+  }
 
-    debts.forEach((d, i) => {
-      let pillClass = 'amber'; let pillText = 'On Loan'; let confColor = 'var(--amber)';
-      if(d.status === 'persists') { pillClass = 'coral'; pillText = 'Persists'; confColor = 'var(--coral)'; }
-      if(d.status === 'clear' || d.status === 'owned') { pillClass = 'teal'; pillText = 'Clear'; confColor = 'var(--teal)'; }
+  function guessSubject(name) {
+    const lower = (name || '').toLowerCase();
+    if (lower.includes('physics') || lower.includes('calculus')) return 'STEM';
+    if (lower.includes('chemistry') || lower.includes('biology')) return 'Science';
+    if (lower.includes('english') || lower.includes('themes')) return 'Humanities';
+    if (lower.includes('history') || lower.includes('civics') || lower.includes('government')) return 'Social Studies';
+    if (lower.includes('capstone')) return 'Project';
+    return 'General';
+  }
 
-        const conceptEncoded = encodeURIComponent(d.concept || '');
+  function normalizeDebt(row) {
+    const status = normalizeStatus(row.status);
+    return {
+      id: row.id || row.concept,
+      name: row.concept,
+      subject: row.subject || guessSubject(row.concept),
+      last_seen: formatRelative(row.timestamp),
+      confidence: Number(row.confidence || 0),
+      status,
+      source_text: row.source_text || '',
+      timestamp: row.timestamp,
+    };
+  }
 
-        if(i < 3 && d.status !== 'owned' && d.status !== 'clear') {
-          quickButtons.innerHTML += `<button class="btn-ghost" onclick="openModal(decodeURIComponent('${conceptEncoded}'))">${d.concept}</button>`;
-      }
+  function renderConcept(c) {
+    const statusConfig = {
+      'on-loan': { label: 'On Loan', color: '#FEF3C7', text: '#92400E', dot: '#D97706' },
+      'persists': { label: 'Persists', color: '#FEE2E2', text: '#991B1B', dot: '#DC2626' },
+      'clear': { label: 'Clear', color: '#D1FAE5', text: '#065F46', dot: '#059669' },
+    };
+    const s = statusConfig[c.status] || statusConfig['on-loan'];
+    const conf = Math.round((c.confidence || 0) * 100);
+    const confColor = conf >= 80 ? '#059669' : conf >= 50 ? '#D97706' : '#DC2626';
 
-      const dateStr = new Date(d.timestamp).toLocaleDateString();
-      const confPercent = Math.round((d.confidence || 0.5) * 100);
-
-      tbody.innerHTML += `
-        <div class="ledger-grid ledger-row" onclick="openModal(decodeURIComponent('${conceptEncoded}'))">
-          <div class="concept-cell">
-            <h3>${d.concept}</h3>
-            <p>${d.source_text ? d.source_text.substring(0,40)+'...' : ''}</p>
-          </div>
-          <div><span class="pill ${pillClass}">${pillText}</span></div>
-          <div>
-            <div class="conf-track"><div class="conf-fill" style="background: ${confColor}; width: ${confPercent}%;"></div></div>
-            <div class="conf-label">${confPercent}%</div>
-          </div>
-          <div class="date-cell">${dateStr}</div>
-          <div><button class="action-btn" aria-label="Open session">→</button></div>
+    return `
+      <div class="concept-row" data-status="${c.status}">
+        <div class="concept-main">
+          <div class="concept-name">${c.name}</div>
+          <div class="concept-meta">${c.subject || 'General'} · Last seen ${c.last_seen || 'today'}</div>
         </div>
-      `;
+        <div class="concept-confidence">
+          <div class="conf-bar-wrap"><div class="conf-bar" style="width:${conf}%; background:${confColor}"></div></div>
+          <span class="conf-label" style="color:${confColor}">${conf}%</span>
+        </div>
+        <div class="concept-status-badge" style="background:${s.color}; color:${s.text}">
+          <span class="status-dot" style="background:${s.dot}"></span>${s.label}
+        </div>
+        <button class="btn-clear-concept" onclick="startSageSession('${c.id}', '${c.name.replace(/'/g, "&#39;")}')">Clear with Sage →</button>
+      </div>`;
+  }
+
+  function updateDebtSummary(concepts) {
+    const total = concepts.length || 0;
+    const onLoan = concepts.filter(item => item.status === 'on-loan').length;
+    const persists = concepts.filter(item => item.status === 'persists').length;
+    const clear = concepts.filter(item => item.status === 'clear').length;
+    const score = total ? Math.round(((onLoan + persists) / total) * 100) : 0;
+    document.getElementById('stat-loan').textContent = String(onLoan);
+    document.getElementById('stat-persists').textContent = String(persists);
+    document.getElementById('stat-clear').textContent = String(clear);
+    document.getElementById('concept-count').textContent = `${total} concept${total === 1 ? '' : 's'} tracked`;
+    document.getElementById('debt-score-badge').textContent = `${score}%`;
+    document.getElementById('debt-ring-pct').textContent = `${score}%`;
+    const arc = document.getElementById('debt-arc');
+    if (arc) {
+      const circumference = 314;
+      arc.style.strokeDashoffset = String(circumference - (circumference * score / 100));
+    }
+
+    const priority = concepts
+      .filter(item => item.status !== 'clear')
+      .sort((a, b) => (a.confidence - b.confidence) || (statusOrder[a.status] - statusOrder[b.status]))[0];
+    document.getElementById('priority-concept').textContent = priority
+      ? priority.name
+      : 'Everything is clear. Try a fresh concept.';
+  }
+
+  function filterLedger(filter) {
+    currentFilter = filter;
+    document.querySelectorAll('.filter-btn').forEach((button) => button.classList.remove('active'));
+    document.querySelectorAll('.filter-btn').forEach((button) => {
+      if ((button.textContent || '').trim().toLowerCase() === filter.replace('-', ' ')) button.classList.add('active');
+      if (filter === 'all' && button.textContent.trim().toLowerCase() === 'all') button.classList.add('active');
     });
+    renderLedger(ledgerConcepts);
+  }
+
+  function renderLedger(concepts) {
+    const list = document.getElementById('concept-list');
+    const filtered = currentFilter === 'all' ? concepts : concepts.filter(item => item.status === currentFilter);
+    list.innerHTML = filtered.length ? filtered.map(renderConcept).join('') : '<div class="dashboard-card" style="padding:16px;color:#6B7280;">No concepts found for this filter.</div>';
+    updateDebtSummary(concepts);
   }
 
   async function fetchState() {
+    console.log('[ledger] refreshing state');
     try {
       const res = await fetch('/api/state');
       const data = await res.json();
-      renderLedger(data.debts);
-      await fetchDebtScore();
+      ledgerConcepts = (data.debts || []).map(normalizeDebt);
+      console.log('[ledger] refreshed concepts', ledgerConcepts);
+      renderLedger(ledgerConcepts);
     } catch (e) {
+      console.error('[ledger] state refresh failed', e);
       showToast('⚠️', 'Connection Error', 'Could not reach backend.');
     }
   }
 
-  async function fetchDebtScore() {
-    try {
-      const res = await fetch('/api/debt-score');
-      const d = await res.json();
-      const scoreEl = document.getElementById('stat-debt-score');
-      const subEl   = document.getElementById('stat-debt-sub');
-      if (!scoreEl) return;
-      scoreEl.textContent = d.score + '%';
-      if (d.score < 30)       { scoreEl.style.color = 'var(--teal)';  subEl.textContent = 'on track'; }
-      else if (d.score < 60)  { scoreEl.style.color = 'var(--amber)'; subEl.textContent = 'needs attention'; }
-      else                    { scoreEl.style.color = 'var(--coral)'; subEl.textContent = 'high debt — clear soon'; }
-    } catch (e) {}
-  }
-
-  function formatModelBadge(agent, modelName) {
-    if (!modelName) return `${agent} · --`;
-    const short = modelName.length > 20 ? `${modelName.slice(0, 20)}…` : modelName;
-    return `${agent} · ${short}`;
-  }
-
-  function applyLlmConfigToUi() {
-    if (!llmConfig) return;
-    const scoutBadge = document.getElementById('scout-model-badge');
-    const lensBadge = document.getElementById('lens-model-badge');
-    if (scoutBadge) scoutBadge.textContent = formatModelBadge('Scout', llmConfig.scout_model);
-    if (lensBadge) lensBadge.textContent = formatModelBadge('Lens', llmConfig.lens_model);
-  }
-
-  function renderModelChips(models) {
-    const wrap = document.getElementById('llmModelChipWrap');
-    wrap.innerHTML = '';
-    if (!models || models.length === 0) {
-      wrap.innerHTML = '<span class="llm-model-empty">No models found for this host.</span>';
-      return;
-    }
-    models.forEach((name) => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'llm-model-chip';
-      btn.textContent = name;
-      btn.onclick = () => {
-        const scout = document.getElementById('scoutModelInput');
-        const sage = document.getElementById('sageModelInput');
-        const lens = document.getElementById('lensModelInput');
-        if (!scout.value.trim()) scout.value = name;
-        else if (!sage.value.trim()) sage.value = name;
-        else lens.value = name;
-      };
-      wrap.appendChild(btn);
-    });
-  }
-
-  function fillLlmForm(configData) {
-    document.getElementById('ollamaHostInput').value = configData.ollama_base_url || configData.ollama_host || '';
-    document.getElementById('scoutModelInput').value = configData.scout_model || '';
-    document.getElementById('sageModelInput').value = configData.sage_model || '';
-    document.getElementById('lensModelInput').value = configData.lens_model || '';
-    renderModelChips(configData.available_models || []);
-  }
-
-  async function loadLlmConfig() {
-    try {
-      const res = await fetch('/api/llm/config');
-      const data = await res.json();
-      llmConfig = data;
-      applyLlmConfigToUi();
-      fillLlmForm(data);
-    } catch (e) {
-      showToast('⚠️', 'LLM config error', 'Unable to load runtime LLM settings.');
-    }
-  }
-
-  function setLlmModalOpen(isOpen) {
-    const modal = document.getElementById('llmConfigModal');
-    if (!modal) return;
-    modal.classList.toggle('open', isOpen);
-    modal.style.display = isOpen ? 'flex' : 'none';
-  }
-
-  function openLlmSettings() {
-    setLlmModalOpen(true);
-    if (llmConfig) fillLlmForm(llmConfig);
-  }
-
-  function closeLlmSettings(event) {
-    if (event && event.target === document.getElementById('llmConfigModal')) closeLlmSettingsBtn();
-  }
-
-  function closeLlmSettingsBtn() {
-    setLlmModalOpen(false);
-  }
-
-  async function refreshLlmModels() {
-    const host = document.getElementById('ollamaHostInput').value.trim();
-    if (!host) {
-      showToast('⚠️', 'Missing host', 'Enter the Ollama server URL first.');
+  async function runScout() {
+    const input = document.getElementById('scout-input');
+    const value = (input.value || '').trim();
+    if (!value) {
+      showToast('⚠️', 'Empty input', 'Please paste something first.');
       return;
     }
 
-    try {
-      const res = await fetch(`/api/llm/models?host=${encodeURIComponent(host)}`);
-      const data = await res.json();
-      renderModelChips(data.models || []);
-      if (!data.models || data.models.length === 0) {
-        showToast('⚠️', 'No models found', 'Host is reachable but returned no tags.');
-      } else {
-        showToast('✅', 'Models loaded', `Found ${data.models.length} model tag(s).`);
-      }
-    } catch (e) {
-      showToast('❌', 'Model load failed', 'Could not reach the Ollama host.');
-    }
-  }
-
-  async function saveLlmSettings() {
-    const payload = {
-      ollama_base_url: document.getElementById('ollamaHostInput').value.trim(),
-      scout_model: document.getElementById('scoutModelInput').value.trim(),
-      sage_model: document.getElementById('sageModelInput').value.trim(),
-      lens_model: document.getElementById('lensModelInput').value.trim(),
-    };
-
-    if (!payload.ollama_base_url || !payload.scout_model || !payload.sage_model || !payload.lens_model) {
-      showToast('⚠️', 'Missing fields', 'Host and all model fields are required.');
-      return;
+    console.log('[scout] sending paste', { length: value.length });
+    input.value = '';
+    const status = document.getElementById('scout-status');
+    if (status) {
+      status.textContent = 'Scout is analyzing...';
+      status.classList.remove('hidden');
     }
 
-    // Close immediately so the user is returned to the app even if save is slow.
-    closeLlmSettingsBtn();
-
-    try {
-      const res = await fetch('/api/llm/config', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        showToast('❌', 'Save failed', data.detail || 'Unable to save configuration.');
-        return;
-      }
-      llmConfig = data;
-      applyLlmConfigToUi();
-      fillLlmForm(data);
-      document.getElementById('llmConfigStatus').textContent = 'Saved. New calls now use this host and model mapping.';
-      showToast('✅', 'LLM settings saved', 'Runtime config updated for Scout, Sage, and Lens.');
-      fetchState();
-    } catch (e) {
-      showToast('❌', 'Save failed', 'Could not save LLM settings.');
-    }
-  }
-
-  async function simulateTag() {
-    const val = document.getElementById('scoutInput').value;
-    if(!val) { showToast('⚠️', 'Empty input', 'Please paste something first.'); return; }
-    
-    document.getElementById('scoutInput').value = '';
-    showToast('⚡', 'Scout is analyzing', 'This will take a few seconds...');
-    window.startColdStartTimer('{{ inference_backend }}');
-    
     try {
       const res = await fetch('/api/scout', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({text: val, session_id: scoutSessionId, student_id: 'anonymous'})
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: value, session_id: ledgerSessionId, student_id: 'demo' }),
       });
-      let data;
-      const contentType = res.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        data = await res.json();
-      } else {
-        const text = await res.text();
-        throw new Error(`Server returned non-JSON (${res.status}): ${text.slice(0, 120)}`);
-      }
+      const data = await res.json();
       if (!res.ok) {
         throw new Error(data.detail || `Server error ${res.status}`);
       }
-      window.stopColdStartTimer();
-      await refreshConceptLedger();
+      console.log('[scout] response', data);
+      if (status) status.textContent = `${data.inserted || 0} concept${(data.inserted || 0) === 1 ? '' : 's'} added to ledger.`;
+      showToast((data.inserted || 0) > 0 ? '✅' : '⚠️', (data.inserted || 0) > 0 ? 'Analysis complete' : 'No concepts detected', (data.inserted || 0) > 0 ? `${data.inserted} concept${data.inserted === 1 ? '' : 's'} added to ledger.` : 'Try pasting a larger explanation or code block.');
       await fetchState();
-      if ((data.inserted || 0) > 0) {
-        showToast('✅', 'Analysis complete', `${data.inserted} concept${data.inserted === 1 ? '' : 's'} added to ledger.`);
-      } else {
-        showToast('⚠️', 'No concepts detected', 'Try pasting a larger explanation or code block.');
-      }
-    } catch(e) {
-      window.stopColdStartTimer();
+    } catch (e) {
+      console.error('[scout] failed', e);
+      if (status) status.textContent = 'Scout failed.';
       showToast('❌', 'Error', e?.message || 'Failed to tag concepts.');
     }
   }
 
-  async function refreshConceptLedger() {
-    const emptyNote = document.getElementById('ledger-empty-note');
-    try {
-      const res = await fetch(`/concepts/${encodeURIComponent(scoutSessionId)}`);
-      const payload = await res.json();
-      const concepts = payload?.concepts || [];
-      if (emptyNote) {
-        emptyNote.style.display = concepts.length === 0 ? 'block' : 'none';
-      }
-      // Render concept scores into ledger body if present (supplements debt_log view)
-      if (concepts.length > 0) {
-        const tbody = document.getElementById('ledger-body');
-        // Only inject concept score rows that aren't already shown from debt_log
-        const existingConcepts = new Set(
-          Array.from(tbody.querySelectorAll('.concept-cell h3')).map(el => el.textContent.trim().toLowerCase())
-        );
-        concepts.forEach(c => {
-          if (!existingConcepts.has((c.concept || '').toLowerCase())) {
-            const score = c.true_comprehension != null ? Math.round(c.true_comprehension * 100) : null;
-            const statusLabel = c.status === 'pending' ? 'On Loan' : (c.status || 'On Loan');
-            const pillClass = c.status === 'verified' ? 'teal' : (c.status === 'live_session_required' ? 'coral' : 'amber');
-            const conceptEncoded = encodeURIComponent(c.concept || '');
-            tbody.innerHTML += `
-              <div class="ledger-grid ledger-row" onclick="openModal(decodeURIComponent('${conceptEncoded}'))">
-                <div class="concept-cell"><h3>${c.concept}</h3><p>${c.raw_content_snippet ? c.raw_content_snippet.substring(0,40)+'...' : ''}</p></div>
-                <div><span class="pill ${pillClass}">${statusLabel}</span></div>
-                <div>
-                  ${score != null ? `<div class="conf-track"><div class="conf-fill" style="width:${score}%;"></div></div><div class="conf-label">${score}%</div>` : '<span style="color:var(--ink-muted);font-size:12px;">pending</span>'}
-                </div>
-                <div class="date-cell">—</div>
-                <div><button class="action-btn" aria-label="Open session">→</button></div>
-              </div>`;
-          }
-        });
-      }
-    } catch (e) {
-      if (emptyNote) {
-        emptyNote.style.display = 'block';
-      }
-    }
+  function startSageSession(conceptId, conceptName) {
+    document.getElementById('current-concept').value = conceptName;
+    openModal(conceptName);
   }
 
-  async function simulateLens() {
-    const input = document.getElementById('lensInput');
-    if(!input.files.length) return;
+  function startPrioritySession() {
+    const priority = ledgerConcepts
+      .filter(item => item.status !== 'clear')
+      .sort((a, b) => a.confidence - b.confidence)[0] || ledgerConcepts[0];
+    if (!priority) {
+      showToast('⚠️', 'No concept selected', 'Add some study content first.');
+      return;
+    }
+    startSageSession(priority.id, priority.name);
+  }
 
-    const file = input.files[0];
+  function renderLensResult(data) {
+    const resultDiv = document.getElementById('lens-result');
+    const qualityColor = {
+      strong: '#059669',
+      partial: '#D97706',
+      weak: '#DC2626',
+    }[data.reasoning_quality] || '#6B7280';
+    resultDiv.innerHTML = `
+      <div class="dashboard-card" style="padding: 16px; background:#fff;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+          <span class="view-toggle-pill" style="background:${qualityColor}14;color:${qualityColor};border-color:${qualityColor}33;">${data.reasoning_quality} reasoning</span>
+          <span class="view-toggle-pill">${data.is_handwritten ? '✓ Handwritten' : '⚠ Not handwritten'}</span>
+        </div>
+        ${data.elements_identified?.length ? `<div class="report-section-label">Concepts identified</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">${data.elements_identified.map((item) => `<span class="view-toggle-pill">${item}</span>`).join('')}</div>` : ''}
+        ${data.gaps_found?.length ? `<div class="report-section-label">Gaps found</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">${data.gaps_found.map((item) => `<span class="view-toggle-pill" style="border-color:#FCA5A5;color:#991B1B;">${item}</span>`).join('')}</div>` : ''}
+        <div style="font-size:13px;line-height:1.6;color:#111827;margin-bottom:8px;">${data.feedback || ''}</div>
+        <div style="font-size:13px;line-height:1.6;color:#065F46;">→ ${data.recommendation || ''}</div>
+      </div>`;
+    resultDiv.classList.remove('hidden');
+  }
+
+  async function runLens(file) {
+    if (!file) return;
+    const resultDiv = document.getElementById('lens-result');
+    resultDiv.innerHTML = `<div class="dashboard-card" style="padding:16px;">🔬 Analyzing your work...</div>`;
+    resultDiv.classList.remove('hidden');
+
     const formData = new FormData();
     formData.append('file', file);
-    const targetConcept = prompt("What concept are you verifying?") || "General";
-    formData.append('concept', targetConcept);
+    formData.append('concept', document.getElementById('current-concept').value || document.getElementById('priority-concept').textContent || '');
 
-    showToast('🔬', 'Lens is analyzing...', 'Please wait.');
-    
     try {
-      const res = await fetch('/api/lens/verify', { method: 'POST', body: formData });
+      const res = await fetch('/api/lens/analyze', { method: 'POST', body: formData });
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data?.detail || 'Lens supports images (JPG, PNG, WEBP) and PDF files.');
-      }
-      
-        if (data.handwritten && !data.has_issue) {
-          showToast('✅', 'Handwritten notes recognized', data.explanation || 'No visual logic failures detected.');
-        } else if(data.explanation && data.width > 0) {
-          showToast('📌', 'Lens found an error', data.explanation);
-      } else {
-          showToast('✅', 'Lens verification', 'No visual logic failures detected.');
-      }
-      fetchState();
-    } catch(e) {
+      if (!res.ok) throw new Error(data.detail || 'Lens analysis failed');
+      renderLensResult(data);
+      showToast('✅', 'Lens complete', data.recommendation || 'Analysis finished.');
+    } catch (e) {
+      console.error('[lens] failed', e);
+      resultDiv.innerHTML = `<div class="dashboard-card" style="padding:16px;color:#991B1B;">Analysis failed. Check that your model supports vision (e.g. Gemma vision or LLaVA).</div>`;
+      resultDiv.classList.remove('hidden');
       showToast('❌', 'Lens Error', e?.message || 'Failed to verify image.');
     }
   }
 
-  // Init
-  try {
-    renderLedger(initialDebts);
-  } catch (e) {
-    console.error('Ledger render error:', e);
-  }
-  fetchDebtScore();
-  refreshConceptLedger();
-  loadLlmConfig();
-  const llmModal = document.getElementById('llmConfigModal');
-  const llmCloseBtn = document.getElementById('llmCloseBtn');
-  const llmCancelBtn = document.getElementById('llmCancelBtn');
-  const llmRefreshBtn = document.getElementById('llmRefreshBtn');
-  const saveBtn = document.getElementById('saveLlmBtn');
-  if (llmModal) {
-    llmModal.addEventListener('click', (event) => {
-      if (event.target === llmModal) closeLlmSettingsBtn();
-    });
-  }
-  const llmModalCard = document.querySelector('#llmConfigModal .llm-config-card');
-  if (llmModalCard) {
-    llmModalCard.addEventListener('click', (event) => event.stopPropagation());
-  }
-  if (llmCloseBtn) {
-    llmCloseBtn.addEventListener('click', closeLlmSettingsBtn);
-  }
-  if (llmCancelBtn) {
-    llmCancelBtn.addEventListener('click', closeLlmSettingsBtn);
-  }
-  if (llmRefreshBtn) {
-    llmRefreshBtn.addEventListener('click', refreshLlmModels);
-  }
-  if (saveBtn) {
-    saveBtn.addEventListener('click', saveLlmSettings);
-  }
-  // Pre-warm Cloud Run on page load - reduces cold start latency for judges.
-  fetch('/api/warmup').catch(() => {});
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && llmModal && llmModal.classList.contains('open')) {
-      closeLlmSettingsBtn();
+  function maybeStartTour() {
+    const tourRequested = new URLSearchParams(window.location.search).get('tour') === '1';
+    const seen = localStorage.getItem('ledgerTourDismissed') === '1';
+    if (!tourRequested || seen) return;
+    const steps = [
+      { selector: '#scout-input', text: 'Paste your study content here - Scout extracts concepts.' },
+      { selector: '#concept-list', text: 'Concepts appear here with their status and confidence.' },
+      { selector: '.btn-clear-concept', text: 'Click here to start a Socratic clearing session.' },
+      { selector: '#debt-arc', text: 'Your debt score drops as you clear concepts.' },
+      { selector: '.kl-tab[href="/progress"]', text: 'Track your improvement over time.' },
+    ];
+    let index = 0;
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(17,24,39,0.52);z-index:180;display:flex;align-items:center;justify-content:center;padding:24px;';
+    const card = document.createElement('div');
+    card.style.cssText = 'max-width:420px;background:white;border-radius:20px;padding:20px;box-shadow:0 18px 50px rgba(17,24,39,0.2);';
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    function highlightCurrent() {
+      const step = steps[index];
+      const target = document.querySelector(step.selector);
+      document.querySelectorAll('.tour-highlight').forEach((node) => node.classList.remove('tour-highlight'));
+      if (target) target.classList.add('tour-highlight');
+      card.innerHTML = `<div style="font-size:12px;color:#6B7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">Demo tour</div><div style="font-size:16px;line-height:1.6;color:#111827;margin-bottom:14px;">${step.text}</div><button class="btn-primary" id="tour-next-btn">${index === steps.length - 1 ? 'Finish tour' : 'Next'}</button>`;
+      const nextBtn = card.querySelector('#tour-next-btn');
+      nextBtn.onclick = () => {
+        index += 1;
+        if (index >= steps.length) {
+          localStorage.setItem('ledgerTourDismissed', '1');
+          overlay.remove();
+          return;
+        }
+        highlightCurrent();
+      };
     }
+
+    overlay.onclick = () => {
+      localStorage.setItem('ledgerTourDismissed', '1');
+      overlay.remove();
+    };
+
+    highlightCurrent();
+  }
+
+  document.querySelectorAll('input[type="file"]').forEach((el) => {
+    el.value = '';
   });
+
+  fetchState().then(maybeStartTour);
 </script>
 {% endblock %}

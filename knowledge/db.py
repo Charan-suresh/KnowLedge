@@ -285,26 +285,493 @@ def seed_demo_data_if_empty() -> bool:
         if existing and existing > 0:
             return False
 
+        def _stamp(days_ago: int, hours_ago: int = 0) -> str:
+            moment = datetime.utcnow() - timedelta(days=days_ago, hours=hours_ago)
+            return moment.strftime("%Y-%m-%d %H:%M:%S")
+
+        # Exact confidence values and statuses from spec.
         rows = [
-            ("Research Capstone Project", "Missing clear hypothesis in the proposal", 0.92, "on_loan", "-13 days"),
-            ("AP English 12 Themes", "Confused central theme of the assigned literature", 0.87, "persists", "-12 days"),
-            ("Calculus AB Limits", "Incorrect evaluation of limits at infinity", 0.78, "clear", "-11 days"),
-            ("Biology Lab Analysis", "Failed to properly identify the cellular structures", 0.84, "clear", "-10 days"),
-            ("World History Revolutions", "Could not explain the socioeconomic causes", 0.81, "on_loan", "-9 days"),
-            ("Civics & Government", "Misidentified checks and balances in action", 0.89, "on_loan", "-7 days"),
-            ("Physics Mechanics", "Newton's laws misapplied in free body diagram", 0.76, "persists", "-5 days"),
-            ("Chemistry Bonding", "Covalent vs ionic properties confused", 0.74, "on_loan", "-2 days"),
+            ("Physics Mechanics", "Newton's laws misapplied in free body diagram", 0.41, "persists", _stamp(5)),
+            ("AP English 12 Themes", "Confused central theme of the assigned literature", 0.38, "persists", _stamp(12)),
+            ("Chemistry Bonding", "Covalent vs ionic properties confused", 0.55, "on_loan", _stamp(2)),
+            ("Civics & Government", "Misidentified checks and balances in action", 0.62, "on_loan", _stamp(7)),
+            ("World History Revolutions", "Could not explain the socioeconomic causes", 0.70, "on_loan", _stamp(9)),
+            ("Research Capstone Project", "Missing clear hypothesis in the proposal", 0.48, "on_loan", _stamp(13)),
+            ("Biology Lab Analysis", "Failed to properly identify the cellular structures", 0.88, "clear", _stamp(3)),
+            ("Calculus AB Limits", "Incorrect evaluation of limits at infinity", 0.91, "clear", _stamp(5)),
         ]
 
-        for concept, source_text, confidence, status, offset in rows:
+        for concept, source_text, confidence, status, timestamp in rows:
             conn.execute(
                 """
                 INSERT INTO debt_log (concept, source_text, confidence, status, timestamp)
-                VALUES (?, ?, ?, ?, datetime('now', ?))
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                (concept, source_text, confidence, status, offset),
+                (concept, source_text, confidence, status, timestamp),
             )
+
+        transcript_sets: list[dict[str, Any]] = [
+            {
+                "session_key": "demo-biology-1",
+                "concept": "Biology Lab Analysis",
+                "student_id": "demo",
+                "started_at": _stamp(5, 4),
+                "score": 0.52,
+                "status": "pending",
+                "turns": [
+                    ("What does the membrane control in a cell?", "It controls what enters and leaves the cell."),
+                    ("How does diffusion move molecules?", "From higher concentration to lower concentration."),
+                    ("Why would water move into this cell?", "Because the solution outside is more dilute."),
+                    ("What observation tells you the diagram is about osmosis?", "Water is crossing a membrane toward balance."),
+                ],
+            },
+            {
+                "session_key": "demo-biology-2",
+                "concept": "Biology Lab Analysis",
+                "student_id": "demo",
+                "started_at": _stamp(4, 5),
+                "score": 0.71,
+                "status": "pending",
+                "turns": [
+                    ("What is the independent variable in the lab?", "The concentration of the solution."),
+                    ("What should stay the same?", "The temperature, volume, and cell type."),
+                    ("Why does that matter?", "So the results only reflect the concentration change."),
+                    ("What pattern would show you understand the setup?", "Explaining the control and test groups clearly."),
+                ],
+            },
+            {
+                "session_key": "demo-biology-3",
+                "concept": "Biology Lab Analysis",
+                "student_id": "demo",
+                "started_at": _stamp(3, 2),
+                "score": 0.88,
+                "status": "clear",
+                "turns": [
+                    ("How would you summarize the result?", "The cells gained water because the environment was hypotonic."),
+                    ("What evidence supports that?", "The cell volume increased and the membrane stayed intact."),
+                    ("What happened to solute balance?", "The system moved toward equilibrium."),
+                    ("What would you say if a classmate asked for the key idea?", "Osmosis moved water through a membrane to balance concentration."),
+                ],
+            },
+            {
+                "session_key": "demo-calculus-1",
+                "concept": "Calculus AB Limits",
+                "student_id": "demo",
+                "started_at": _stamp(8, 3),
+                "score": 0.58,
+                "status": "pending",
+                "turns": [
+                    ("What happens as x approaches the asymptote?", "The function values grow without bound."),
+                    ("How do you tell a vertical asymptote from a hole?", "A hole removes one x-value; an asymptote blows up."),
+                    ("Why does the denominator matter here?", "It causes the fraction to spike near zero."),
+                    ("What sign should you watch for?", "A repeated trend toward infinity on one side."),
+                ],
+            },
+            {
+                "session_key": "demo-calculus-2",
+                "concept": "Calculus AB Limits",
+                "student_id": "demo",
+                "started_at": _stamp(6, 1),
+                "score": 0.76,
+                "status": "pending",
+                "turns": [
+                    ("How do you evaluate a limit at infinity?", "I compare the highest powers in numerator and denominator."),
+                    ("What if the powers are equal?", "The limit is the ratio of leading coefficients."),
+                    ("Why do lower powers matter less?", "They shrink relative to the dominant term."),
+                    ("What shortcut helps you avoid mistakes?", "Divide every term by the highest power of x."),
+                ],
+            },
+            {
+                "session_key": "demo-calculus-3",
+                "concept": "Calculus AB Limits",
+                "student_id": "demo",
+                "started_at": _stamp(5),
+                "score": 0.91,
+                "status": "clear",
+                "turns": [
+                    ("Can you explain the final answer without symbols?", "The function approaches a stable value as x gets very large."),
+                    ("What tells you the limit exists?", "Both sides approach the same output."),
+                    ("Why is that useful in graphing?", "It shows the end behavior of the function."),
+                    ("What would you say if asked to teach it?", "Look at dominant terms and compare how they behave."),
+                ],
+            },
+        ]
+
+        # Additional one-session concepts to round out the 12-session demo history.
+        transcript_sets.extend([
+            {
+                "session_key": "demo-physics-1",
+                "concept": "Physics Mechanics",
+                "student_id": "demo",
+                "started_at": _stamp(11),
+                "score": 0.41,
+                "status": "persists",
+                "turns": [],
+            },
+            {
+                "session_key": "demo-english-1",
+                "concept": "AP English 12 Themes",
+                "student_id": "demo",
+                "started_at": _stamp(12, 1),
+                "score": 0.38,
+                "status": "persists",
+                "turns": [],
+            },
+            {
+                "session_key": "demo-chemistry-1",
+                "concept": "Chemistry Bonding",
+                "student_id": "demo",
+                "started_at": _stamp(9, 2),
+                "score": 0.55,
+                "status": "pending",
+                "turns": [],
+            },
+            {
+                "session_key": "demo-civics-1",
+                "concept": "Civics & Government",
+                "student_id": "demo",
+                "started_at": _stamp(7, 3),
+                "score": 0.62,
+                "status": "pending",
+                "turns": [],
+            },
+            {
+                "session_key": "demo-history-1",
+                "concept": "World History Revolutions",
+                "student_id": "demo",
+                "started_at": _stamp(9, 1),
+                "score": 0.70,
+                "status": "pending",
+                "turns": [],
+            },
+            {
+                "session_key": "demo-capstone-1",
+                "concept": "Research Capstone Project",
+                "student_id": "demo",
+                "started_at": _stamp(13, 4),
+                "score": 0.48,
+                "status": "pending",
+                "turns": [],
+            },
+        ])
+
+        for transcript in transcript_sets:
+            cursor = conn.execute(
+                """
+                INSERT INTO sessions (student_id, started_at, concept_being_studied)
+                VALUES (?, ?, ?)
+                """,
+                (transcript["student_id"], transcript["started_at"], transcript["concept"]),
+            )
+            db_session_id = int(cursor.lastrowid)
+            conn.execute(
+                """
+                INSERT INTO concept_scores
+                    (session_id, concept, direct_answer_score, temporal_score, probe_depth_score,
+                     trap_score, true_comprehension, status, verification_signal)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    db_session_id,
+                    transcript["concept"],
+                    min(1.0, max(0.0, transcript["score"] + 0.02)),
+                    min(1.0, max(0.0, transcript["score"] - 0.04)),
+                    min(1.0, max(0.0, transcript["score"])),
+                    0.45 if transcript["status"] != "clear" else 0.85,
+                    transcript["score"],
+                    transcript["status"],
+                    0.8 if transcript["status"] == "clear" else 0.0,
+                ),
+            )
+            conn.execute(
+                """
+                INSERT INTO session_aliases (client_session_id, db_session_id)
+                VALUES (?, ?)
+                ON CONFLICT(client_session_id) DO UPDATE SET db_session_id = excluded.db_session_id
+                """,
+                (transcript["session_key"], db_session_id),
+            )
+            if transcript["turns"]:
+                asked_questions = []
+                for question, response in transcript["turns"]:
+                    asked_questions.append(question)
+                    conn.execute(
+                        """
+                        INSERT INTO probe_turns (session_id, concept, sage_question, student_response)
+                        VALUES (?, ?, ?, ?)
+                        """,
+                        (transcript["session_key"], transcript["concept"], question, response),
+                    )
+                conn.execute(
+                    """
+                    INSERT INTO session_probe_state (session_id, concept, asked_questions_json, updated_at)
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(session_id, concept) DO UPDATE SET
+                        asked_questions_json = excluded.asked_questions_json,
+                        updated_at = CURRENT_TIMESTAMP
+                    """,
+                    (transcript["session_key"], transcript["concept"], json.dumps(asked_questions)),
+                )
+
+        # Seed clearing history for the two cleared concepts.
+        conn.execute(
+            "INSERT INTO clearing_history (concept, result, notes, session_ts) VALUES (?, 'clear', 'Sage session completed', ?)",
+            ("Biology Lab Analysis", _stamp(3)),
+        )
+        conn.execute(
+            "INSERT INTO clearing_history (concept, result, notes, session_ts) VALUES (?, 'clear', 'Sage session completed', ?)",
+            ("Calculus AB Limits", _stamp(5)),
+        )
         return True
+
+
+def clear_demo_data() -> None:
+    """Remove seeded demo rows and related session history."""
+    tables = [
+        "debt_log",
+        "clearing_history",
+        "sessions",
+        "concept_scores",
+        "probe_turns",
+        "session_probe_state",
+        "probe_registry",
+        "socratic_interrupts",
+        "session_aliases",
+        "session_fingerprints",
+        "real_performance",
+        "solo_sessions",
+        "audit_log",
+    ]
+    with get_connection() as conn:
+        for table in tables:
+            try:
+                conn.execute(f"DELETE FROM {table}")
+            except sqlite3.Error:
+                pass
+
+
+def calculate_streak(student_id: str, conn: Optional[sqlite3.Connection] = None) -> int:
+    """Consecutive days with at least one session for the given student."""
+    close_conn = False
+    if conn is None:
+        conn = get_connection()
+        close_conn = True
+    try:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT date(started_at) AS day
+            FROM sessions
+            WHERE student_id = ?
+            ORDER BY day DESC
+            """,
+            (student_id,),
+        ).fetchall()
+        from datetime import date
+
+        expected = date.today()
+        streak = 0
+        for row in rows:
+            value = row.get("day")
+            if not value:
+                continue
+            try:
+                current = date.fromisoformat(value)
+            except ValueError:
+                continue
+            if current == expected:
+                streak += 1
+                expected = current - timedelta(days=1)
+            elif current < expected:
+                break
+        return streak
+    finally:
+        if close_conn:
+            conn.close()
+
+
+def get_progress_summary(student_id: str) -> Dict[str, Any]:
+    """Returns the four headline metrics used on the progress page."""
+    with get_connection() as conn:
+        concepts = conn.execute(
+            """
+            SELECT concept, status, confidence, timestamp
+            FROM debt_log
+            ORDER BY timestamp DESC
+            """
+        ).fetchall()
+
+        total = len(concepts)
+        clear_rows = [c for c in concepts if (c.get("status") or "").lower() == "clear"]
+        active_rows = [c for c in concepts if (c.get("status") or "").lower() in {"on_loan", "persists"}]
+
+        debt_score = round((len(active_rows) / total) * 100) if total else 0
+
+        month_cutoff = datetime.utcnow() - timedelta(days=30)
+        cleared_this_month = sum(
+            1
+            for row in clear_rows
+            if row.get("timestamp") and _parse_timestamp(row["timestamp"]) >= month_cutoff
+        )
+
+        clear_durations = []
+        for row in clear_rows:
+            first_seen = row.get("timestamp")
+            if not first_seen:
+                continue
+            cleared_at = _parse_clear_timestamp(conn, row["concept"]) or _parse_timestamp(first_seen)
+            if cleared_at and first_seen:
+                clear_durations.append((cleared_at - _parse_timestamp(first_seen)).days)
+
+    avg_days = round(sum(clear_durations) / len(clear_durations), 1) if clear_durations else 0
+    return {
+        "debt_score": debt_score,
+        "cleared_this_month": cleared_this_month,
+        "avg_days_to_clear": avg_days,
+        "streak": calculate_streak(student_id),
+        "total": total,
+        "on_loan": len([c for c in concepts if (c.get("status") or "").lower() == "on_loan"]),
+        "persists": len([c for c in concepts if (c.get("status") or "").lower() == "persists"]),
+    }
+
+
+def get_progress_history(days: int = 14) -> Dict[str, List[Any]]:
+    """Return debt and cleared series for the progress chart."""
+    with get_connection() as conn:
+        sessions = conn.execute(
+            """
+            SELECT s.started_at, cs.concept, cs.status
+            FROM concept_scores cs
+            JOIN sessions s ON s.id = cs.session_id
+            WHERE s.student_id = 'demo'
+            ORDER BY s.started_at ASC, cs.id ASC
+            """
+        ).fetchall()
+
+    if not sessions:
+        labels = [(datetime.utcnow() - timedelta(days=days - 1 - idx)).strftime("%b %d") for idx in range(days)]
+        return {"dates": labels, "scores": [100] * days, "cleared": [0] * days}
+
+    first_seen = _parse_timestamp(sessions[0]["started_at"]).date()
+    start_day = first_seen - timedelta(days=1)
+    today = datetime.utcnow().date()
+    total_days = max(days, (today - start_day).days + 1)
+    total_days = min(total_days, max(days, 14))
+
+    concept_state: Dict[str, str] = {}
+    dates: List[str] = []
+    scores: List[int] = []
+    cleared: List[int] = []
+
+    index = 0
+    session_count = len(sessions)
+    for offset in range(total_days):
+        current_day = start_day + timedelta(days=offset)
+        day_end = datetime.combine(current_day, datetime.max.time())
+
+        while index < session_count and _parse_timestamp(sessions[index]["started_at"]) <= day_end:
+            row = sessions[index]
+            concept_state[row["concept"]] = (row.get("status") or "pending").lower()
+            index += 1
+
+        total = len(concept_state)
+        active = sum(1 for status in concept_state.values() if status not in {"clear", "owned"})
+        debt_score = 100 if total == 0 else round(active / total * 100)
+        dates.append(current_day.strftime("%b %d"))
+        scores.append(debt_score)
+        cleared.append(100 - debt_score)
+
+    if len(dates) > days:
+        dates = dates[-days:]
+        scores = scores[-days:]
+        cleared = cleared[-days:]
+
+    return {"dates": dates, "scores": scores, "cleared": cleared}
+
+
+def get_progress_concepts(student_id: str = "demo") -> List[Dict[str, Any]]:
+    """Return the latest concept snapshot for the progress concept chart."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                concept,
+                status,
+                confidence,
+                timestamp,
+                source_text
+            FROM debt_log
+            WHERE id IN (SELECT MAX(id) FROM debt_log GROUP BY concept)
+            ORDER BY timestamp DESC
+            """
+        ).fetchall()
+
+        concept_rows = []
+        for row in rows:
+            cleared_at = conn.execute(
+                "SELECT session_ts FROM clearing_history WHERE concept = ? AND result IN ('clear', 'cleared', 'owned') ORDER BY session_ts DESC LIMIT 1",
+                (row["concept"],),
+            ).fetchone()
+            concept_rows.append(
+                {
+                    "id": row["concept"].lower().replace(" ", "-"),
+                    "name": row["concept"],
+                    "confidence": float(row.get("confidence") or 0.0),
+                    "status": (row.get("status") or "on_loan").replace("owned", "clear"),
+                    "subject": _guess_subject(row["concept"]),
+                    "last_seen": _format_relative_timestamp(row.get("timestamp")),
+                    "cleared_at": _format_relative_timestamp(cleared_at["session_ts"]) if cleared_at else None,
+                }
+            )
+    return concept_rows
+
+
+def _guess_subject(concept: str) -> str:
+    text = (concept or "").lower()
+    if "physics" in text or "calculus" in text:
+        return "STEM"
+    if "chemistry" in text or "biology" in text:
+        return "Science"
+    if "english" in text or "writing" in text:
+        return "Humanities"
+    if "history" in text or "civics" in text or "government" in text:
+        return "Social Studies"
+    if "capstone" in text:
+        return "Project"
+    return "General"
+
+
+def _format_relative_timestamp(value: Any) -> str:
+    ts = _parse_timestamp(value)
+    delta = datetime.utcnow() - ts
+    days = max(0, delta.days)
+    if days == 0:
+        return "today"
+    if days == 1:
+        return "1 day ago"
+    return f"{days} days ago"
+
+
+def _parse_timestamp(value: Any) -> datetime:
+    text = str(value or "").strip()
+    if not text:
+        return datetime.utcnow()
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        try:
+            return datetime.strptime(text, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return datetime.utcnow()
+
+
+def _parse_clear_timestamp(conn: sqlite3.Connection, concept: str) -> Optional[datetime]:
+    row = conn.execute(
+        "SELECT session_ts FROM clearing_history WHERE concept = ? ORDER BY session_ts ASC LIMIT 1",
+        (concept,),
+    ).fetchone()
+    if not row:
+        return None
+    return _parse_timestamp(row.get("session_ts"))
 
 
 def insert_clearing_history(

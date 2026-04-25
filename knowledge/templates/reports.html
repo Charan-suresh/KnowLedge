@@ -3,274 +3,223 @@
 {% block title %}Reports · KnowLedge{% endblock %}
 {% block topbar_title %}Reports{% endblock %}
 {% block topbar_sub %}Insight aggregates and weekly summaries{% endblock %}
+{% block topbar_actions %}{% endblock %}
 
 {% block head %}
 <style>
-  /* Print stylesheet */
+  .report-container { display: flex; flex-direction: column; gap: 18px; }
+  .report-header-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .toggle-group { display: flex; gap: 4px; background: var(--cream-deep); padding: 4px; border-radius: 10px; }
+  .toggle-group a { padding: 6px 16px; font-size: 13px; font-weight: 500; color: var(--ink-muted); border-radius: 6px; text-decoration: none; }
+  .toggle-group a.active { background: white; color: var(--ink); box-shadow: var(--shadow-sm); }
+  .report-summary-card { padding: 20px; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.75fr); gap: 18px; align-items: start; background: white; border: 1px solid var(--rule); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); }
+  .summary-main { padding-right: 18px; border-right: 1px solid var(--rule); }
+  .summary-side { display: flex; flex-direction: column; gap: 12px; }
+  .report-summary-title { font-family: 'Playfair Display', serif; font-size: 28px; margin-bottom: 6px; }
+  .report-summary-text { font-size: 15px; line-height: 1.7; color: var(--ink); }
+  .report-summary-meta { font-size: 12px; color: var(--ink-muted); margin-top: 10px; }
+  .metric-row { padding: 14px 0; border-bottom: 1px solid var(--rule); display: flex; align-items: center; gap: 16px; }
+  .metric-row:last-of-type { border-bottom: none; }
+  .m-val { font-family: 'Playfair Display', serif; font-size: 26px; font-weight: 700; min-width: 40px; }
+  .m-label { font-size: 13px; color: var(--ink-muted); }
+  .next-clear-banner { background: var(--amber-light); padding: 14px 16px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; gap: 12px; cursor: pointer; transition: background 0.2s; }
+  .next-clear-banner:hover { background: #faecc0; }
+  .score-compare { display: flex; gap: 12px; align-items: center; margin-top: 16px; font-size: 13px; font-weight: 500; flex-wrap: wrap; }
+  .score-box { padding: 8px 12px; border-radius: 6px; border: 1px solid var(--rule); background: white; }
+  .report-layout { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(300px, 0.8fr); gap: 20px; align-items: start; }
+  .report-panel { padding: 18px; background: white; border: 1px solid var(--rule); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
+  .report-panel h3 { font-family: 'Playfair Display', serif; font-size: 20px; margin-bottom: 10px; }
+  .report-history-table { width: 100%; border-collapse: collapse; }
+  .report-history-table th, .report-history-table td { padding: 12px 10px; border-bottom: 1px solid var(--rule); text-align: left; font-size: 13px; }
+  .report-history-table th { font-size: 11px; text-transform: uppercase; color: var(--ink-muted); font-family: 'DM Mono', monospace; }
+  .report-side-stack { display: flex; flex-direction: column; gap: 14px; }
+  .report-side-card { padding: 18px; background: white; border: 1px solid var(--rule); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
+  .report-side-card h4 { font-family: 'Playfair Display', serif; font-size: 18px; margin-bottom: 10px; }
+  .report-aggregate-list { display: flex; flex-direction: column; gap: 10px; }
+  .report-aggregate-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 12px; background: white; }
+  .view-toggle-pill { border-radius: 999px; padding: 7px 14px; border: 1px solid #E5E7EB; background: white; font-size: 13px; color: #374151; }
+  .view-toggle-pill.active { background: #ECFDF5; color: #059669; border-color: #A7F3D0; font-weight: 600; }
+  @media (max-width: 980px) {
+    .report-summary-card, .report-layout { grid-template-columns: 1fr; }
+    .summary-main { border-right: none; padding-right: 0; }
+  }
   @media print {
     body { background: white; }
     body::before { display: none; }
-    .sidebar, .topbar, .btn-group, .download-btn, #toast-container, .modal-backdrop { display: none !important; }
+    .kl-nav, .no-print, #toast-container, .modal-backdrop, .floating-help-btn { display: none !important; }
     .main-content { margin-left: 0; padding: 0; }
     .content { padding: 0; }
-    .report-card, .ledger-card { box-shadow: none; border: 1px solid #ddd; break-inside: avoid; margin-bottom: 24px;}
+    .report-container { padding: 0; margin: 0; width: 100%; }
+    .report-panel, .report-summary-card, .report-side-card { box-shadow: none; break-inside: avoid; margin-bottom: 20px; }
+    body { font-size: 12pt; color: black; }
   }
-
-  .toggle-group { display: flex; gap: 4px; background: var(--cream-deep); padding: 4px; border-radius: 10px; }
-  .toggle-group a { padding: 6px 16px; font-size: 13px; font-weight: 500; color: var(--ink-muted); border-radius: 6px; text-decoration: none;}
-  .toggle-group a.active { background: white; color: var(--ink); box-shadow: var(--shadow-sm); }
-  
-  .report-summary-card { background: #fff; border: 1px solid var(--rule); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); overflow: hidden; display: flex; }
-  .rsc-left { padding: 32px 36px; flex: 6; border-right: 1px solid var(--rule); }
-  .rsc-right { padding: 32px 36px; flex: 4; display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--cream); }
-  
-  .rsc-header { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--ink-muted); text-transform: uppercase; margin-bottom: 4px; }
-  .rsc-title { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 700; margin-bottom: 24px; }
-  
-  .metric-row { padding: 16px 0; border-bottom: 1px solid var(--rule); display: flex; align-items: center; gap: 16px; }
-  .metric-row:last-of-type { border-bottom: none; }
-  .m-val { font-family: 'Playfair Display', serif; font-size: 28px; font-weight: 700; min-width: 40px; }
-  .m-label { font-size: 13px; color: var(--ink-muted); }
-  
-  .next-clear-banner { background: var(--amber-light); padding: 16px 20px; border-radius: 8px; margin-top: 16px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: background 0.2s; }
-  .next-clear-banner:hover { background: #faecc0; }
-  
-  .streak-circle { width: 160px; height: 160px; border-radius: 50%; background: var(--ink); display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: var(--shadow-md); margin-bottom: 16px; }
-  .streak-num { font-family: 'Playfair Display', serif; font-size: 48px; font-weight: 700; color: white; line-height: 1; }
-  .streak-lbl { font-size: 13px; color: var(--amber-mid); margin-top: 4px; }
-  
-  .score-compare { display: flex; gap: 12px; align-items: center; margin-top: 16px; font-size: 13px; font-weight: 500;}
-  .score-box { padding: 8px 12px; border-radius: 6px; border: 1px solid var(--rule); background: white; }
 </style>
 {% endblock %}
 
-{% block topbar_actions %}
-  <div class="toggle-group">
-    <a href="/reports?view=student" class="{% if view == 'student' %}active{% endif %}">Student view</a>
-    <a href="/reports?view=instructor" class="{% if view == 'instructor' %}active{% endif %}">Instructor view</a>
-  </div>
-{% endblock %}
-
 {% block content %}
+<div class="report-container">
+  <div class="report-header-row no-print">
+    <div class="toggle-group">
+      <a href="/reports?view=student" class="{% if view == 'student' %}active{% endif %}">Student view</a>
+      <a href="/reports?view=instructor" class="{% if view == 'instructor' %}active{% endif %}">Instructor view</a>
+    </div>
+    <button class="btn-primary download-btn" type="button" onclick="downloadReport()">↓ Download PDF report</button>
+  </div>
 
-{% if view == 'student' %}
-  <!-- Student Weekly Summary -->
+  {% if view == 'student' %}
   <div class="report-summary-card report-card">
-    <div class="rsc-left">
-      <div class="rsc-header">Week of Oct 2 - Oct 9</div>
-      <div class="rsc-title">Weekly Report</div>
-      
-      <div class="metric-row">
-        <div class="m-val" style="color: {% if weekly_report.net_change < 0 %}var(--teal){% else %}var(--coral){% endif %};">
-          {% if weekly_report.net_change < 0 %}↓{% else %}↑{% endif %} {{ weekly_report.net_change|abs }}
-        </div>
-        <div class="m-label">debt score change this week</div>
-      </div>
-      <div class="metric-row">
-        <div class="m-val" style="color: var(--teal);">{{ weekly_report.cleared_this_week }}</div>
-        <div class="m-label">concepts moved to Owned</div>
-      </div>
-      <div class="metric-row">
-        <div class="m-val" style="color: var(--amber);">{{ weekly_report.new_debt }}</div>
-        <div class="m-label">new concepts added to ledger</div>
-      </div>
-      
-      <div class="next-clear-banner" onclick="openModal('{{ weekly_report.top_concept }}')">
-        <div style="font-size: 14px; color: var(--amber);">🎯 Next to clear: <strong style="color: var(--ink);">{{ weekly_report.top_concept }}</strong></div>
-        <div style="font-size: 13px; font-weight: 500; color: var(--amber);">Start Sage session &rarr;</div>
-      </div>
+    <div class="summary-main">
+      <div class="rsc-header">Live report snapshot</div>
+      <div class="report-summary-title">Student summary</div>
+      <div class="report-summary-text" id="live-report-summary">Loading report summary...</div>
+      <div class="report-summary-meta" id="live-report-meta"></div>
     </div>
-    
-    <div class="rsc-right">
-      <div class="streak-circle">
-        <div class="streak-num">{{ weekly_report.streak_days }}</div>
-        <div class="streak-lbl">day streak</div>
-      </div>
-      <div style="font-size: 12px; color: var(--ink-muted); text-align: center;">Keep clearing daily to grow your streak.</div>
-      
-      <div class="score-compare">
-        <div class="score-box">Last week: {{ weekly_report.prev_debt_score }}%</div>
-        <div style="color: var(--ink-muted);">&rarr;</div>
-        <div class="score-box" style="color: {% if weekly_report.curr_debt_score < weekly_report.prev_debt_score %}var(--teal){% else %}var(--coral){% endif %};">This week: {{ weekly_report.curr_debt_score }}%</div>
+    <div class="summary-side">
+      <div class="report-panel">
+        <div class="metric-row"><div class="m-val" style="color: var(--teal);">{{ weekly_report.cleared_this_week }}</div><div class="m-label">concepts moved to Clear this week</div></div>
+        <div class="metric-row"><div class="m-val" style="color: var(--amber);">{{ weekly_report.new_debt }}</div><div class="m-label">new concepts added</div></div>
+        <div class="metric-row"><div class="m-val" style="color: var(--coral);">{{ weekly_report.streak_days }}</div><div class="m-label">day streak</div></div>
+        <div class="next-clear-banner" onclick="window.location.href='/ledger'">
+          <div style="font-size: 14px; color: var(--amber);">🎯 Next to clear: <strong style="color: var(--ink);">{{ weekly_report.top_concept }}</strong></div>
+          <div style="font-size: 13px; font-weight: 500; color: var(--amber);">Open Sage &rarr;</div>
+        </div>
       </div>
     </div>
   </div>
 
-  <div class="ledger-card" style="margin-top: 18px;">
-    <h3 style="font-family: 'Playfair Display', serif; font-size: 16px; margin-bottom: 10px;">Live report snapshot</h3>
-    <div id="live-report-loading" style="font-size: 13px; color: var(--ink-muted);">Loading report...</div>
-    <div id="live-report-empty" style="display:none; font-size: 13px; color: var(--ink-muted);">No report data yet for this student.</div>
-    <div id="live-report-content" style="display:none;">
-      <div id="live-report-meta" style="font-size: 13px; color: var(--ink-muted); margin-bottom: 8px;"></div>
-      <div id="live-report-debt" style="font-size: 13px; color: var(--ink);"></div>
-      <div id="live-report-actions" style="font-size: 13px; color: var(--ink); margin-top: 8px;"></div>
+  <div class="report-layout">
+    <div class="report-panel report-card">
+      <h3>Full concept history</h3>
+      <table class="report-history-table">
+        <thead>
+          <tr>
+            <th>Concept</th>
+            <th>Subject</th>
+            <th>Status</th>
+            <th>Days taken</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in concept_time_to_clear|sort(attribute='status', reverse=true) %}
+          <tr>
+            <td>{{ c.concept }}</td>
+            <td>{{ c.subject }}</td>
+            <td>{% if c.status == 'owned' or c.status == 'clear' %}<span class="view-toggle-pill" style="background:#D1FAE5;color:#065F46;">Clear</span>{% elif c.status == 'persists' %}<span class="view-toggle-pill" style="background:#FEE2E2;color:#991B1B;">Persists</span>{% else %}<span class="view-toggle-pill" style="background:#FEF3C7;color:#92400E;">On Loan</span>{% endif %}</td>
+            <td>{% if c.days_to_clear is not none and c.days_to_clear > 14 %}<span style="color: var(--coral); font-weight: 500;">{{ c.days_to_clear }} days</span>{% elif c.days_to_clear is not none and c.days_to_clear >= 7 %}<span style="color: var(--amber); font-weight: 500;">{{ c.days_to_clear }} days</span>{% elif c.days_to_clear is not none %}<span style="color: var(--teal); font-weight: 500;">{{ c.days_to_clear }} days</span>{% else %}<span style="color: var(--ink-muted); font-weight: 500;">—</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="report-side-stack">
+      <div class="report-side-card">
+        <h4>Quick metrics</h4>
+        <div class="score-compare">
+          <div class="score-box">Last week: {{ weekly_report.prev_debt_score }}%</div>
+          <div style="color: var(--ink-muted);">&rarr;</div>
+          <div class="score-box" style="color: {% if weekly_report.curr_debt_score < weekly_report.prev_debt_score %}var(--teal){% else %}var(--coral){% endif %};">This week: {{ weekly_report.curr_debt_score }}%</div>
+        </div>
+        <div class="report-summary-meta" style="margin-top: 12px;">Keep clearing daily to improve the streak and lower debt.</div>
+      </div>
+      <div class="report-side-card">
+        <h4>Sync & integrity</h4>
+        <div class="report-aggregate-list">
+          <div class="report-aggregate-row"><span>Sync status</span><strong>{{ sync_audit[0].status if sync_audit else 'never' }}</strong></div>
+          <div class="report-aggregate-row"><span>Signed sessions</span><strong>{{ integrity_summary.sessions_with_signatures }}/{{ integrity_summary.sessions_total }}</strong></div>
+          <div class="report-aggregate-row"><span>Spoof attempts</span><strong>{{ integrity_summary.spoof_attempts }}</strong></div>
+          <div class="report-aggregate-row"><span>Flagged concepts</span><strong>{{ integrity_summary.flagged_concepts }}</strong></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="report-summary-card report-card">
+    <div class="summary-main">
+      <div class="rsc-header">Instructor view</div>
+      <div class="report-summary-title">Class aggregate report</div>
+      <div class="report-summary-text">This demo instructor view uses the single student's data formatted as a class report.</div>
+      <div class="report-summary-meta">The same concepts and timelines are aggregated for a teacher-facing snapshot.</div>
+    </div>
+    <div class="summary-side">
+      <div class="report-panel">
+        <h3>Export</h3>
+        <a href="/reports/export?format=csv" class="btn-ghost no-print" style="display:block;text-align:center;text-decoration:none;">↓ CSV</a>
+        <button class="btn-primary no-print" style="width:100%;margin-top:10px;" type="button" onclick="downloadReport()">↓ PDF</button>
+      </div>
     </div>
   </div>
 
-  <!-- Concept History Table -->
-  <div style="margin-top: 40px;">
-    <h2 style="font-family: 'Playfair Display', serif; font-size: 17px; margin-bottom: 16px;">Full concept history</h2>
-    <div class="ledger-card">
-      <div class="ledger-grid ledger-header" style="grid-template-columns: 1.5fr 1fr 1fr 1fr 1fr;">
-        <div>Concept</div>
-        <div>Subject</div>
-        <div>Status</div>
-        <div>Days taken</div>
-        <div></div>
-      </div>
-      {% for c in concept_time_to_clear|sort(attribute='status', reverse=true) %}
-      <div class="ledger-grid ledger-row" style="grid-template-columns: 1.5fr 1fr 1fr 1fr 1fr;">
-        <div class="concept-cell"><h3>{{ c.concept }}</h3></div>
-        <div style="font-size: 13px; color: var(--ink-muted);">{{ c.subject }}</div>
-        <div>
-          {% if c.status == 'owned' %}<span class="pill teal">Owned</span>
-          {% elif c.status == 'persists' %}<span class="pill coral">Persists</span>
-          {% else %}<span class="pill amber">On Loan</span>{% endif %}
+  <div class="report-layout">
+    <div class="report-panel report-card">
+      <h3>Class Performance</h3>
+      <table class="report-history-table">
+        <thead>
+          <tr>
+            <th>Concept</th>
+            <th>Borrowed</th>
+            <th>Cleared</th>
+            <th>Avg Days</th>
+            <th>Persistence Rate</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in class_report %}
+          <tr>
+            <td>{{ r.concept }}</td>
+            <td>{{ r.total_borrowed }}</td>
+            <td>{{ r.total_cleared }}</td>
+            <td>{{ r.avg_days_to_clear }}d</td>
+            <td>{{ r.persistence_rate }}%</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="report-side-stack">
+      <div class="report-side-card report-card">
+        <h4>Integrity snapshot</h4>
+        <div class="report-aggregate-list">
+          <div class="report-aggregate-row"><span>Signed sessions</span><strong>{{ integrity_summary.sessions_with_signatures }}/{{ integrity_summary.sessions_total }}</strong></div>
+          <div class="report-aggregate-row"><span>Spoof attempts</span><strong>{{ integrity_summary.spoof_attempts }}</strong></div>
+          <div class="report-aggregate-row"><span>Flagged concepts</span><strong>{{ integrity_summary.flagged_concepts }}</strong></div>
         </div>
-        <div>
-          {% if c.days_to_clear is not none and c.days_to_clear > 14 %} <span style="color: var(--coral); font-weight: 500;">{{ c.days_to_clear }} days</span>
-          {% elif c.days_to_clear is not none and c.days_to_clear >= 7 %} <span style="color: var(--amber); font-weight: 500;">{{ c.days_to_clear }} days</span>
-          {% elif c.days_to_clear is not none %} <span style="color: var(--teal); font-weight: 500;">{{ c.days_to_clear }} days</span>
-          {% else %} <span style="color: var(--ink-muted); font-weight: 500;">—</span>{% endif %}
-        </div>
-        <div></div>
       </div>
-      {% endfor %}
+      <div class="report-side-card report-card">
+        <h4>Recent sync audit</h4>
+        <div class="report-aggregate-list">
+          {% for item in sync_audit[:3] %}
+          <div class="report-aggregate-row"><span>{{ item.week or item.synced_at or 'sync' }}</span><strong>{{ item.status }}</strong></div>
+          {% endfor %}
+        </div>
+      </div>
     </div>
   </div>
-  
-  <div style="margin-top: 32px; text-align: center;">
-    <button class="btn-dark download-btn" onclick="window.print()">↓ Download PDF report</button>
-  </div>
-
-{% else %}
-  <!-- Instructor Class Report -->
-  <div class="grid-2col" style="grid-template-columns: 1fr 320px;">
-    
-    <div>
-      <h2 style="font-family: 'Playfair Display', serif; font-size: 17px; margin-bottom: 16px;">Class Performance</h2>
-      <div class="ledger-card">
-        <div class="ledger-grid ledger-header" style="grid-template-columns: 1.2fr 80px 80px 100px 1fr;">
-          <div>Concept</div>
-          <div title="Total Borrowed">Borrowed</div>
-          <div title="Total Cleared">Cleared</div>
-          <div title="Avg Days to Clear">Avg Days</div>
-          <div>Persistence Rate</div>
-        </div>
-        {% for r in class_report %}
-        <div class="ledger-grid ledger-row" style="grid-template-columns: 1.2fr 80px 80px 100px 1fr; align-items: center;">
-          <div class="concept-cell"><h3>{{ r.concept }}</h3></div>
-          <div style="font-size: 13px;">{{ r.total_borrowed }}</div>
-          <div style="font-size: 13px;">{{ r.total_cleared }}</div>
-          <div style="font-size: 13px;">{{ r.avg_days_to_clear }}d</div>
-          <div>
-            {% set pr = r.persistence_rate %}
-            {% set color = 'var(--teal)' %}
-            {% if pr > 60 %}{% set color = 'var(--coral)' %}
-            {% elif pr >= 30 %}{% set color = 'var(--amber)' %}{% endif %}
-            
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <div class="conf-track" style="width: 60px; margin: 0;"><div class="conf-fill" style="background: {{ color }}; width: {{ pr }}%;"></div></div>
-              <span style="font-size: 12px; color: var(--ink-muted);">{{ pr }}%</span>
-            </div>
-          </div>
-        </div>
-        {% endfor %}
-      </div>
-    </div>
-    
-    <div>
-      <h2 style="font-family: 'Playfair Display', serif; font-size: 17px; margin-bottom: 16px; color: transparent;">Actions</h2>
-      <div class="panel-card" style="background: var(--ink); color: white; border-color: transparent;">
-        <h3 style="font-family: 'Playfair Display', serif; font-size: 16px; margin-bottom: 16px;">Export class data</h3>
-        <div style="display: flex; gap: 12px; margin-bottom: 16px;">
-          <a href="/reports/export?format=csv" class="btn-ghost" style="color: white; border-color: rgba(255,255,255,0.2); text-decoration: none; flex: 1; text-align: center;">↓ CSV</a>
-          <button class="btn-ghost" style="color: white; border-color: rgba(255,255,255,0.2); flex: 1;" onclick="window.print()">↓ PDF</button>
-        </div>
-        <p style="font-size: 11px; color: rgba(255,255,255,0.5); line-height: 1.4;">All exports are concept-level aggregates only. No individual student data is included.</p>
-      </div>
-
-      <div class="panel-card" style="margin-top: 16px;">
-        <h3 style="font-family: 'Playfair Display', serif; font-size: 16px; margin-bottom: 10px;">Instructor Sync</h3>
-        <div style="font-size: 12px; color: var(--ink-muted); margin-bottom: 10px;">Last sync status: {{ sync_audit[0].status if sync_audit else 'never' }}</div>
-        <button class="btn-dark" style="width: 100%;" onclick="shareWeeklyNow()">Share Weekly Aggregate</button>
-        <div style="font-size: 11px; color: var(--ink-muted); margin-top: 8px;">No chat text or student identifiers are shared.</div>
-      </div>
-
-      <div class="panel-card" style="margin-top: 16px;">
-        <h3 style="font-family: 'Playfair Display', serif; font-size: 16px; margin-bottom: 10px;">Integrity Snapshot</h3>
-        <div style="font-size: 12px; color: var(--ink-muted);">Signed sessions: {{ integrity_summary.sessions_with_signatures }}/{{ integrity_summary.sessions_total }}</div>
-        <div style="font-size: 12px; color: var(--ink-muted);">Spoof attempts: {{ integrity_summary.spoof_attempts }}</div>
-        <div style="font-size: 12px; color: var(--ink-muted);">Flagged concepts: {{ integrity_summary.flagged_concepts }}</div>
-      </div>
-    </div>
-    
-  </div>
-
-{% endif %}
+  {% endif %}
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-  async function shareWeeklyNow() {
-    try {
-      const res = await fetch('/api/sync/share-weekly', { method: 'POST' });
-      if (!res.ok) throw new Error('Sync failed');
-      window.location.reload();
-    } catch (e) {
-      alert('Weekly sync failed. Please retry.');
-    }
+  function downloadReport() {
+    window.print();
   }
 
-  async function loadLiveReport() {
-    const loading = document.getElementById('live-report-loading');
-    const empty = document.getElementById('live-report-empty');
-    const content = document.getElementById('live-report-content');
+  async function loadLiveSummary() {
+    const summary = document.getElementById('live-report-summary');
     const meta = document.getElementById('live-report-meta');
-    const debt = document.getElementById('live-report-debt');
-    const actions = document.getElementById('live-report-actions');
-
-    if (!loading || !empty || !content || !meta || !debt || !actions) {
-      return;
-    }
-
-    loading.style.display = 'block';
-    empty.style.display = 'none';
-    content.style.display = 'none';
-
+    if (!summary || !meta) return;
     try {
-      const res = await fetch('/reports/anonymous');
+      const res = await fetch('/api/reports/summary?student_id=demo');
       const data = await res.json();
-      const perConcept = data?.per_concept || [];
-      if (!perConcept.length) {
-        loading.style.display = 'none';
-        empty.style.display = 'block';
-        return;
-      }
-
-      const debtConcepts = data?.comprehension_debt || [];
-      const recs = data?.recommended_actions || [];
-      meta.textContent = `Concepts tracked: ${perConcept.length} · Temporal anomalies: ${data?.temporal_anomaly_count || 0}`;
-      debt.textContent = debtConcepts.length
-        ? `Debt concepts: ${debtConcepts.map(x => `${x.concept} (${Number(x.comprehension_score).toFixed(2)})`).join(', ')}`
-        : 'Debt concepts: none';
-      actions.textContent = recs.length
-        ? `Recommended actions: ${recs.map(x => x.recommendation).join(' | ')}`
-        : 'Recommended actions: keep practicing verified concepts.';
-
-      loading.style.display = 'none';
-      content.style.display = 'block';
+      summary.textContent = data.summary || 'No report data yet.';
+      meta.textContent = `Generated ${new Date(data.generated_at).toLocaleString()}`;
     } catch (e) {
-      loading.style.display = 'none';
-      empty.style.display = 'block';
+      summary.textContent = 'Unable to load report summary.';
+      meta.textContent = '';
     }
   }
 
-  loadLiveReport();
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-      loadLiveReport();
-    }
-  });
+  loadLiveSummary();
 </script>
 {% endblock %}

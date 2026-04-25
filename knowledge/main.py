@@ -27,7 +27,7 @@ from .sync.audit_log import get_sync_audit
 from .routers import progress, reports
 from .routers.ingest import router as ingest_router
 from .routers.classroom import router as classroom_router
-from .lens import ALLOWED_LENS_MIME_TYPES
+from .lens import ALLOWED_LENS_MIME_TYPES, analyze_document
 from .agents.inference_router import check_health, get_health_status, chat_async
 from .integrity.session_fingerprint import generate_device_key_if_missing
 from .anti_gaming import (
@@ -296,6 +296,36 @@ async def health():
     }
 
 
+@app.get("/api/model-status")
+async def model_status():
+    """Lightweight endpoint polled by the nav bar status indicator."""
+    try:
+        reachable = await check_health()
+        return {
+            "ready": reachable,
+            "model": config.SAGE_MODEL,
+            "backend": config.INFERENCE_BACKEND,
+        }
+    except Exception:
+        return {"ready": False, "model": config.SAGE_MODEL, "backend": config.INFERENCE_BACKEND}
+
+
+@app.get("/demo")
+async def demo_redirect():
+    """Seeds demo data and redirects to ledger with demo mode active."""
+    db.seed_demo_data_if_empty()
+    response = RedirectResponse(url="/ledger?tour=1")
+    response.set_cookie("demo_mode", "true", max_age=60 * 60 * 24 * 30, samesite="lax")
+    return response
+
+
+@app.post("/reset-demo")
+async def reset_demo():
+    """Wipes all debt_log rows and re-seeds demo data."""
+    db.clear_demo_data()
+    return {"status": "ok"}
+
+
 @app.get("/api/warmup")
 async def warmup():
     """Fire-and-forget warmup endpoint to reduce first-judge latency."""
@@ -396,9 +426,11 @@ async def trigger_scout(req: ScoutRequest):
     if req.session_id:
         db.set_session_alias(req.session_id, db_session_id)
     logger.info("[scout] client_session_id=%s resolved_db_session_id=%s", req.session_id, db_session_id)
+    print(f"[scout] ingest start client_session_id={req.session_id} db_session_id={db_session_id} text_len={len(req.text)}")
 
     # Process inline so UI refresh sees updates immediately.
     concepts = tag_content(req.text)
+    print(f"[scout] extracted concepts={[c.concept_tag for c in concepts]}")
     inserted = 0
     inserted_concepts: list[str] = []
     seen = set()
@@ -413,6 +445,7 @@ async def trigger_scout(req: ScoutRequest):
 
         confidence = float(max(0.0, min(1.0, concept.confidence_score)))
         db.insert_debt(concept_name, req.text, confidence)
+        logger.info("[scout] inserted debt concept=%s confidence=%.2f session=%s", concept_name, confidence, db_session_id)
         orchestrator.event_bus.put({"type": "DEBT_ADDED", "concept": concept_name})
         inserted += 1
         inserted_concepts.append(concept_name)
@@ -422,6 +455,7 @@ async def trigger_scout(req: ScoutRequest):
         concepts=inserted_concepts,
         raw_content=req.text,
     )
+    print(f"[scout] seeded concept_scores={seeded}")
 
     return {
         "status": "ok",
@@ -747,6 +781,24 @@ async def trigger_lens(concept: str = Form(...), file: UploadFile = File(...)):
         }
     except HTTPException:
         raise
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/lens/analyze")
+async def analyze_lens(file: UploadFile = File(...), concept: str = Form(None)):
+    mime_type = (file.content_type or "").strip().lower()
+    if mime_type not in ALLOWED_LENS_MIME_TYPES:
+        raise HTTPException(status_code=400, detail="Lens supports images (JPG, PNG, WEBP) and PDF files.")
+
+    contents = await file.read()
+    if not contents:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    try:
+        return analyze_document(contents, (concept or "").strip(), mime_type)
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:

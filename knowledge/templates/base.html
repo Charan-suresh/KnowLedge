@@ -12,6 +12,50 @@
 </head>
 <body>
 
+  <div id="model-loading-screen" class="loading-screen" style="display:none;">
+    <div class="loading-content">
+      <div class="loading-logo">
+        <div class="loading-k">K</div>
+        KnowLedge
+      </div>
+      <div class="loading-message" id="loading-msg">Starting Gemma 4...</div>
+      <div class="loading-bar"><div class="loading-bar-fill" id="loading-bar-fill"></div></div>
+      <div class="loading-detail" id="loading-detail">Loading model into memory</div>
+    </div>
+  </div>
+
+  {% if demo_mode %}
+  <div class="demo-banner no-print" id="demo-banner">
+    <span>Demo mode · Showing sample student data · Clear this and start fresh →</span>
+    <div class="demo-banner-actions">
+      <button type="button" onclick="resetDemo()">Start fresh →</button>
+      <button type="button" onclick="dismissBanner()">✕</button>
+    </div>
+  </div>
+  {% endif %}
+
+  <nav class="kl-nav no-print">
+    <div class="kl-brand">
+      <span class="kl-brand-mark">K</span>
+      KnowLedge
+    </div>
+
+    <div class="kl-nav-tabs">
+      <a href="/ledger" class="kl-tab {% if '/ledger' in request.url.path %}active{% endif %}">Ledger</a>
+      <a href="/progress" class="kl-tab {% if '/progress' in request.url.path %}active{% endif %}">Progress</a>
+      <a href="/reports" class="kl-tab {% if '/reports' in request.url.path %}active{% endif %}">Reports</a>
+      <a href="/help" class="kl-tab {% if '/help' in request.url.path %}active{% endif %}">Help</a>
+    </div>
+
+    <div class="kl-nav-right">
+      <div class="kl-model-status" id="model-status">
+        <span class="kl-status-dot loading"></span>
+        <span class="kl-status-text">Connecting to Gemma 4...</span>
+      </div>
+      <button class="kl-btn-ghost" type="button" onclick="openSoloAssessment()">Practice</button>
+    </div>
+  </nav>
+
 
 
   <div id="cold-start-banner" style="display:none;background:var(--cream-deep);border:1px solid var(--rule);border-radius:var(--radius);padding:16px 20px;margin:24px 36px;font-family:'DM Mono',monospace;font-size:12px;color:var(--ink-muted);">
@@ -225,6 +269,102 @@
       toast.innerHTML = `<div class="toast-icon">${icon}</div><div class="toast-content"><h5>${title}</h5><p>${sub}</p></div>`;
       container.appendChild(toast);
       setTimeout(() => { toast.classList.add('hide'); setTimeout(() => toast.remove(), 300); }, 3500);
+    }
+
+    function openSoloAssessment() {
+      startSoloAssessment();
+    }
+
+    function dismissBanner() {
+      localStorage.setItem('demoBannerDismissed', '1');
+      const banner = document.getElementById('demo-banner');
+      if (banner) banner.style.display = 'none';
+    }
+
+    async function resetDemo() {
+      try {
+        const res = await fetch('/reset-demo', { method: 'POST' });
+        if (!res.ok) throw new Error('Reset failed');
+        localStorage.removeItem('demoBannerDismissed');
+        window.location.href = '/ledger';
+      } catch (e) {
+        showToast('❌', 'Reset failed', 'Could not clear demo data.');
+      }
+    }
+
+    const demoBanner = document.getElementById('demo-banner');
+    if (demoBanner && localStorage.getItem('demoBannerDismissed') === '1') {
+      demoBanner.style.display = 'none';
+    }
+
+    async function checkModelStatus() {
+      const statusRoot = document.getElementById('model-status');
+      const dot = document.querySelector('.kl-status-dot');
+      const text = document.querySelector('.kl-status-text');
+      try {
+        const response = await fetch('/api/model-status');
+        const data = await response.json();
+        if (data.ready) {
+          if (dot) dot.classList.remove('loading');
+          if (text) text.textContent = `Gemma 4 · ${data.model}`;
+          const loadingScreen = document.getElementById('model-loading-screen');
+          if (loadingScreen) loadingScreen.style.display = 'none';
+          return true;
+        }
+        if (text) text.textContent = 'Starting Gemma 4...';
+        if (statusRoot) statusRoot.dataset.ready = 'false';
+        return false;
+      } catch (e) {
+        if (text) text.textContent = 'Model offline';
+        if (statusRoot) statusRoot.dataset.ready = 'false';
+        return false;
+      }
+    }
+
+    const loadingMessages = [
+      ['Starting Gemma 4...', 'Loading model into memory'],
+      ['Almost ready...', 'Gemma 4 · 4B parameters · no internet needed'],
+      ['One moment...', 'All your data stays on this device'],
+    ];
+    let loadingMessageIdx = 0;
+    let loadingTicker = null;
+
+    async function waitForModel() {
+      const loadingScreen = document.getElementById('model-loading-screen');
+      const loadingMsg = document.getElementById('loading-msg');
+      const loadingDetail = document.getElementById('loading-detail');
+      const loadingFill = document.getElementById('loading-bar-fill');
+      if (!loadingScreen || !loadingMsg || !loadingDetail || !loadingFill) return;
+
+      const ready = await checkModelStatus();
+      if (ready) return;
+
+      loadingScreen.style.display = 'flex';
+      if (!loadingTicker) {
+        loadingTicker = setInterval(() => {
+          const current = loadingMessages[loadingMessageIdx % loadingMessages.length];
+          loadingMsg.textContent = current[0];
+          loadingDetail.textContent = current[1];
+          loadingFill.style.width = `${Math.min(100, 30 + loadingMessageIdx * 20)}%`;
+          loadingMessageIdx += 1;
+        }, 2000);
+      }
+
+      while (true) {
+        const modelReady = await checkModelStatus();
+        if (modelReady) {
+          if (loadingTicker) {
+            clearInterval(loadingTicker);
+            loadingTicker = null;
+          }
+          loadingFill.style.width = '100%';
+          setTimeout(() => {
+            loadingScreen.style.display = 'none';
+          }, 250);
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
     }
 
     // ── Solo Mode ─────────────────────────────────────────────────────────────
@@ -601,6 +741,8 @@
         }
       }
     }
+
+    waitForModel();
   </script>
   {% block scripts %}{% endblock %}
 </body>

@@ -1,7 +1,7 @@
 import json
 import base64
 from dataclasses import dataclass
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 import re
 import logging
 from PIL import Image
@@ -91,6 +91,14 @@ def _parse_json_payload(raw: str) -> dict:
         return {}
 
     return {}
+
+
+def _strip_fences(raw: str) -> str:
+    content = (raw or "").strip()
+    if content.startswith("```"):
+        content = re.sub(r"^```(?:json)?\s*", "", content, flags=re.IGNORECASE)
+        content = re.sub(r"\s*```$", "", content)
+    return content.strip()
 
 
 def _ollama_headers() -> dict:
@@ -247,6 +255,96 @@ def _verify_single_image(image_bytes: bytes, concept: str, expected_elements: Op
         confidence=confidence,
         audio_bytes=None,
     )
+
+
+def _analyze_single_image(image_bytes: bytes, concept: str) -> Dict[str, Any]:
+    image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+    model_name = _select_vision_model()
+    concept_context = f"The student is studying: {concept}." if concept else ""
+    prompt = f"""{concept_context}
+Analyze this handwritten note or diagram carefully.
+Answer in JSON only, no preamble:
+{{
+  "is_handwritten": true or false,
+  "reasoning_quality": "strong" | "partial" | "weak",
+  "elements_identified": ["list", "of", "concepts", "seen"],
+  "gaps_found": ["list of gaps or misconceptions"],
+  "feedback": "One encouraging sentence about what they got right",
+  "recommendation": "One specific next step to deepen understanding"
+}}"""
+
+    raw = _vision_chat_json(prompt, image_b64, model_name)
+    raw_json = _strip_fences((raw.get("response") or (raw.get("message", {}) or {}).get("content", "") or ""))
+    parsed = _parse_json_payload(raw_json)
+    if not parsed:
+        return {
+            "is_handwritten": True,
+            "reasoning_quality": "partial",
+            "elements_identified": [],
+            "gaps_found": ["Could not fully analyze the image"],
+            "feedback": "Image received. Try uploading a clearer photo.",
+            "recommendation": "Ensure good lighting and the full page is visible.",
+        }
+
+    elements = parsed.get("elements_identified", [])
+    if not isinstance(elements, list):
+        elements = []
+    gaps = parsed.get("gaps_found", [])
+    if not isinstance(gaps, list):
+        gaps = []
+
+    return {
+        "is_handwritten": _to_bool(parsed.get("is_handwritten", parsed.get("handwritten", False))),
+        "reasoning_quality": str(parsed.get("reasoning_quality", "partial") or "partial").lower(),
+        "elements_identified": [str(item).strip() for item in elements if str(item).strip()],
+        "gaps_found": [str(item).strip() for item in gaps if str(item).strip()],
+        "feedback": str(parsed.get("feedback", "") or "").strip() or "Handwritten work recognized.",
+        "recommendation": str(parsed.get("recommendation", "") or "").strip() or "Try one more worked example.",
+    }
+
+
+def analyze_document(file_bytes: bytes, concept: str, mime_type: str) -> Dict[str, Any]:
+    media_type = (mime_type or "").strip().lower()
+    if media_type not in ALLOWED_LENS_MIME_TYPES:
+        raise ValueError("Lens supports images (JPG, PNG, WEBP) and PDF files.")
+
+    if media_type == "application/pdf":
+        page_images, note = _render_pdf_pages(file_bytes)
+        if not page_images:
+            return {
+                "is_handwritten": False,
+                "reasoning_quality": "weak",
+                "elements_identified": [],
+                "gaps_found": ["PDF has no renderable pages"],
+                "feedback": "No visible pages were found.",
+                "recommendation": "Upload a clearer PDF with at least one visible page.",
+                "note": note,
+            }
+
+        page_results = [_analyze_single_image(page, concept) for page in page_images[:3]]
+        rank = {"strong": 2, "partial": 1, "weak": 0}
+        worst_quality = min(page_results, key=lambda item: rank.get(str(item.get("reasoning_quality", "partial")), 1))
+        elements = []
+        gaps = []
+        handwritten = False
+        for result in page_results:
+            handwritten = handwritten or bool(result.get("is_handwritten"))
+            elements.extend(result.get("elements_identified", []) or [])
+            gaps.extend(result.get("gaps_found", []) or [])
+
+        combined_feedback = page_results[0].get("feedback", "") if page_results else "Handwritten work recognized."
+        combined_recommendation = page_results[0].get("recommendation", "Try one more worked example.") if page_results else "Try one more worked example."
+        return {
+            "is_handwritten": handwritten,
+            "reasoning_quality": worst_quality.get("reasoning_quality", "partial"),
+            "elements_identified": sorted({item for item in elements if item}),
+            "gaps_found": sorted({item for item in gaps if item}),
+            "feedback": combined_feedback,
+            "recommendation": combined_recommendation,
+            "note": note,
+        }
+
+    return _analyze_single_image(file_bytes, concept)
 
 def verify_image(image_bytes: bytes, concept: str) -> ExaminerResult:
     """

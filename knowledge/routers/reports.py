@@ -2,11 +2,14 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 import io
 import csv
+from datetime import datetime, timedelta
 from .. import db
 from .. import config
 from ..agents.inference_router import chat
 
 router = APIRouter()
+
+_REPORT_SUMMARY_CACHE: dict[str, dict[str, object]] = {}
 
 @router.get("/reports", response_class=HTMLResponse)
 async def get_reports(request: Request, view: str = "student"):
@@ -71,6 +74,63 @@ def _recommend_for_concept(concept: str, score: float) -> str:
         return f"Review {concept} with one worked example and one edge case."
 
 
+def _build_report_summary_prompt(student_id: str) -> str:
+    overview = db.get_student_progress_overview(student_id)
+    concepts = overview.get("concepts", [])
+    concept_lines = []
+    for concept in concepts:
+        concept_lines.append(
+            f"- {concept.get('concept')} | status={concept.get('status')} | score={float(concept.get('true_comprehension') or 0):.2f}"
+        )
+    concept_text = "\n".join(concept_lines) if concept_lines else "- No concepts found"
+    return (
+        "You are an academic advisor. Here is a student's learning data:\n"
+        f"{concept_text}\n\n"
+        "Write a 3-sentence report summary covering:\n"
+        "1. Their strongest areas\n"
+        "2. Their biggest knowledge gaps\n"
+        "3. One specific actionable recommendation\n"
+        "Keep it encouraging and specific. Plain text only."
+    )
+
+
+def _get_cached_report_summary(student_id: str) -> str:
+    now = datetime.utcnow()
+    cached = _REPORT_SUMMARY_CACHE.get(student_id)
+    if cached:
+        stored_at = cached.get("stored_at")
+        if isinstance(stored_at, datetime) and now - stored_at < timedelta(hours=1):
+            return str(cached.get("summary") or "")
+
+    prompt = _build_report_summary_prompt(student_id)
+    summary = ""
+    try:
+        response = chat(
+            model=config.SAGE_MODEL,
+            messages=[
+                {"role": "system", "content": "Return plain text only. No bullet points."},
+                {"role": "user", "content": prompt},
+            ],
+        )
+        summary = (response.get("message", {}) or {}).get("content", "").strip()
+    except Exception:
+        overview = db.get_student_progress_overview(student_id)
+        concepts = overview.get("concepts", [])
+        if concepts:
+            strongest = sorted(concepts, key=lambda item: float(item.get("true_comprehension") or 0), reverse=True)[:2]
+            weakest = sorted(concepts, key=lambda item: float(item.get("true_comprehension") or 0))[:2]
+            summary = (
+                f"Strongest areas: {', '.join(item['concept'] for item in strongest)}. "
+                f"Biggest gaps: {', '.join(item['concept'] for item in weakest)}. "
+                f"Recommendation: revisit the lowest-scoring concept with one worked example and one self-explanation."
+            )
+        else:
+            summary = "No report data is available yet. Paste study content to build a learning history."
+
+    _REPORT_SUMMARY_CACHE[student_id] = {"summary": summary, "stored_at": now}
+    return summary
+
+
 @router.get("/reports/{student_id}")
 async def get_student_report(student_id: str):
     value = (student_id or "").strip()
@@ -101,4 +161,14 @@ async def get_student_report(student_id: str):
         "temporal_anomaly_count": snapshot.get("temporal_anomaly_count", 0),
         "recommended_actions": recommendations,
         "session_history": snapshot.get("session_history", []),
+    }
+
+
+@router.get("/api/reports/summary")
+async def reports_summary(student_id: str = "demo"):
+    value = (student_id or "").strip() or "demo"
+    return {
+        "student_id": value,
+        "summary": _get_cached_report_summary(value),
+        "generated_at": datetime.utcnow().isoformat(),
     }

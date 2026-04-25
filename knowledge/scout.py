@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from collections import Counter
+import json
 import re
 from typing import List
 from . import config
@@ -25,6 +26,14 @@ class ConceptTag:
 def _title_case_concept(text: str) -> str:
     parts = [part for part in re.split(r"\s+", text.strip()) if part]
     return " ".join(part[:1].upper() + part[1:] for part in parts)
+
+
+def _strip_code_fences(content: str) -> str:
+    text = (content or "").strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"\s*```$", "", text)
+    return text.strip()
 
 
 def _fallback_concepts(text: str, limit: int = 3) -> List[ConceptTag]:
@@ -105,13 +114,11 @@ def _extract_concepts_from_response(response: dict, text: str) -> List[ConceptTa
     if extracted_concepts:
         return extracted_concepts
 
-    content = str(message.get("content", "") or "").strip()
+    content = _strip_code_fences(str(message.get("content", "") or ""))
     if content:
         try:
             payload = re.search(r"\{.*\}", content, flags=re.DOTALL)
             if payload:
-                import json
-
                 parsed = json.loads(payload.group(0))
                 concepts = parsed.get("concepts", []) if isinstance(parsed, dict) else []
                 for concept in concepts:
@@ -188,6 +195,7 @@ def tag_content(text: str) -> List[ConceptTag]:
     )
 
     try:
+        logger.info("[scout] extracting concepts for %s chars", len(text))
         response = chat(
             model=config.SCOUT_MODEL,
             messages=[
@@ -198,8 +206,11 @@ def tag_content(text: str) -> List[ConceptTag]:
             num_predict=256,
         )
 
-        return _extract_concepts_from_response(response, text)
+        logger.info("[scout] raw response keys=%s", list(response.keys()))
+        concepts = _extract_concepts_from_response(response, text)
+        logger.info("[scout] extracted %s concept(s): %s", len(concepts), [c.concept_tag for c in concepts])
+        return concepts
 
     except Exception as e:
-        logger.error(f"Error connecting to Sentinel model: {e}")
+        logger.exception("[scout] error connecting to model: %s", e)
         return _fallback_concepts(text)

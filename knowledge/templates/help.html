@@ -8,6 +8,23 @@
   <a class="btn-ghost" href="/ledger">← Back to Ledger</a>
 {% endblock %}
 
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    securityLevel: 'loose',
+    themeVariables: {
+      primaryColor: '#E1F5EE',
+      primaryBorderColor: '#1D9E75',
+      primaryTextColor: '#085041',
+      lineColor: '#1D9E75'
+    }
+  });
+</script>
+{% endblock %}
+
 {% block content %}
 <div class="help-page">
   <section class="help-hero">
@@ -131,36 +148,21 @@
 
       <div class="flowchart-wrap">
         <div class="mermaid">
-          flowchart TD
-            A["Student opens Sage"] --> B["Scout: Paste study content"]
-            B --> C["Gemma 4 extracts concepts"]
-            C --> D["Concepts added to Ledger"]
-            D --> E["Sage begins Socratic session"]
-            E --> F["Student answers probe question"]
-            F --> G["Temporal fingerprint captured"]
-            G --> H{{"Response classified"}}
-            H -->|"Confident"| I["Escalate to harder probe"]
-            H -->|"Struggling"| J["Scaffold with simpler question"]
-            H -->|"Suspicious"| K["Switch to Specificity Probe"]
-            I --> L["Update Comprehension Score"]
-            J --> L
-            K --> L
-            L --> M{{"Score >= 0.8?"}}
-            M -->|"Yes"| N["Mark concept Verified"]
-            M -->|"No"| O{{"Score < 0.4?"}}
-            O -->|"Yes"| P["Flag: Live Session Required"]
-            O -->|"No"| Q["Continue probing"]
-            Q --> E
-            N --> R["Update Progress + Reports"]
-            P --> R
-            
-            classDef success fill:#D6F0EC,stroke:#0E7A6E,color:#1C1A14
-            classDef detection fill:#FDF3DC,stroke:#D4820A,color:#1C1A14
-            classDef warning fill:#FDECEA,stroke:#C94A3A,color:#1C1A14
-            
-            class A,D,N,R success
-            class C,G detection
-            class K,P warning
+flowchart TD
+  A["Student pastes study content"] --> B["Scout extracts concepts"]
+  B --> C["Concepts added to Ledger with On Loan status"]
+  C --> D["Student opens Sage session"]
+  D --> E["Sage asks a probing question"]
+  E --> F["Student answers in their own words"]
+  F --> G{{"Sage evaluates response"}}
+  G -->|"Demonstrated mastery"| H["Concept marked Clear"]
+  G -->|"Gaps found"| I["Sage asks follow-up"]
+  G -->|"Upload handwriting"| J["Lens verifies reasoning"]
+  I --> E
+  J -->|"Verified"| H
+  J -->|"Gaps remain"| K["Concept marked Persists"]
+  H --> L["Progress and Reports update"]
+  K --> D
         </div>
       </div>
 
@@ -325,69 +327,53 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script>
   // Hide floating help button on help page
   const helpBtn = document.querySelector('.floating-help-btn');
-  if (helpBtn) {
-    helpBtn.style.display = 'none';
-  }
+  if (helpBtn) helpBtn.style.display = 'none';
 
-  // Initialize Mermaid
-  mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
-  mermaid.contentLoaded();
-
-  // Tab switching functionality
+  // Tab switching
   const tabs = document.querySelectorAll('[data-help-tab]');
   const panels = {
     steps: document.getElementById('help-steps'),
-    flow: document.getElementById('help-flow'),
-    faq: document.getElementById('help-faq')
+    flow:  document.getElementById('help-flow'),
+    faq:   document.getElementById('help-faq')
   };
+
+  let mermaidRendered = false;
+
+  function renderMermaidOnce() {
+    if (mermaidRendered) return;
+    mermaidRendered = true;
+    mermaid.run({ nodes: document.querySelectorAll('.mermaid') });
+  }
+
+  renderMermaidOnce();
 
   tabs.forEach(btn => {
     btn.addEventListener('click', () => {
       const key = btn.dataset.helpTab;
-      
-      // Update tab buttons
-      tabs.forEach(t => {
-        t.classList.remove('active');
-        t.setAttribute('aria-selected', 'false');
-      });
-      
-      // Update panels
+      tabs.forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected', 'false'); });
       Object.values(panels).forEach(p => p.classList.remove('active'));
-      
-      // Activate selected
       btn.classList.add('active');
       btn.setAttribute('aria-selected', 'true');
       panels[key].classList.add('active');
-      
-      // Trigger Mermaid re-render if flow tab opened
-      if (key === 'flow') {
-        setTimeout(() => {
-          mermaid.contentLoaded();
-        }, 100);
-      }
+      if (key === 'flow') setTimeout(renderMermaidOnce, 50);
     });
   });
 
-  // FAQ Search Functionality
+  // FAQ Search
   const faqSearch = document.getElementById('faqSearch');
-  const faqItems = Array.from(document.querySelectorAll('.faq-item'));
-  const faqEmpty = document.getElementById('faqEmpty');
-
+  const faqItems  = Array.from(document.querySelectorAll('.faq-item'));
+  const faqEmpty  = document.getElementById('faqEmpty');
   faqSearch.addEventListener('input', (e) => {
     const q = e.target.value.trim().toLowerCase();
     let shown = 0;
-    
     faqItems.forEach(item => {
-      const text = (item.textContent + ' ' + item.dataset.keywords).toLowerCase();
-      const match = !q || text.includes(q);
+      const match = !q || (item.textContent + ' ' + item.dataset.keywords).toLowerCase().includes(q);
       item.style.display = match ? '' : 'none';
-      if (match) shown += 1;
+      if (match) shown++;
     });
-    
     faqEmpty.classList.toggle('hidden', shown !== 0);
   });
 </script>
