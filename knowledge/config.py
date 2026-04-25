@@ -18,5 +18,7 @@ def _env_ollama_base_url() -> str:
 
 OLLAMA_BASE_URL = _env_ollama_base_url()
 OLLAMA_AUTH_TOKEN = os.getenv("OLLAMA_AUTH_TOKEN", "").strip()
+REQUIRED_MODEL = (os.getenv("REQUIRED_MODEL") or "gemma4:e4b").strip().lower() or "gemma4:e4b"
+STRICT_REQUIRED_MODEL = os.getenv("STRICT_REQUIRED_MODEL", "true").lower() == "true"
 DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
 DB_PATH = str(BASE_DIR / "data" / "knowledge.db")

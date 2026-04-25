@@ -245,11 +245,20 @@
         const data = await r.json();
         const statusEl = document.getElementById("mscStatus");
         const modelEl = document.getElementById("mscModel");
-        statusEl.textContent = data.ollama_running ? "✓ Connected" : "✗ Not reachable";
-        statusEl.style.color = data.ollama_running ? "#4ADE80" : "#F87171";
+        const requiredLoaded = data.required_model_loaded ?? data.ready;
+        if (!data.ollama_running) {
+          statusEl.textContent = "✗ Not reachable";
+          statusEl.style.color = "#F87171";
+        } else if (requiredLoaded) {
+          statusEl.textContent = "✓ Required model ready";
+          statusEl.style.color = "#4ADE80";
+        } else {
+          statusEl.textContent = `✗ Required model missing (${data.required_model || "gemma4:e4b"})`;
+          statusEl.style.color = "#FBBF24";
+        }
         modelEl.textContent = data.model || "No compatible model found";
-        modelEl.style.color = data.model ? "#4ADE80" : "#F87171";
-        if (!data.model) {
+        modelEl.style.color = requiredLoaded ? "#4ADE80" : "#F87171";
+        if (!requiredLoaded) {
           showToast("No model found. Run: ollama pull gemma4:e4b", "warn");
         }
       } catch (e) {
