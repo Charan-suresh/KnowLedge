@@ -10,11 +10,11 @@ KnowLedge is a local-first learning debt tracker. It now runs a single Ollama-ba
 ## Local setup
 
 1. Install Ollama.
-2. Pull `gemma4:e4b-q4_K_M`.
+2. Pull `gemma4:e4b`.
 3. Start `ollama serve`.
 4. Install dependencies from `requirements.txt`.
 5. Run the app with `uvicorn knowledge.main:app --reload`.
 
 The app will automatically fall back across these available models:
 
-`gemma4:e4b-q4_K_M -> gemma4:e4b -> gemma3:4b -> gemma3:1b`
+`gemma4:e4b -> gemma3:4b -> gemma3:1b`

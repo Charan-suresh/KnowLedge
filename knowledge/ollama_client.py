@@ -6,7 +6,6 @@ import httpx
 
 OLLAMA_BASE = "http://localhost:11434"
 MODEL_PREFERENCE = [
-    "gemma4:e4b-q4_K_M",
     "gemma4:e4b",
     "gemma3:4b",
     "gemma3:1b",

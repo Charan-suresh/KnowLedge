@@ -22,7 +22,7 @@
         <p>To use KnowLedge locally:</p>
         <ol>
           <li>Install Ollama: <a href="https://ollama.com" target="_blank" rel="noreferrer">ollama.com</a></li>
-          <li>Run: <code>ollama pull gemma4:e4b-q4_K_M</code></li>
+          <li>Run: <code>ollama pull gemma4:e4b</code></li>
           <li>Run: <code>ollama serve</code></li>
           <li>Refresh this page</li>
         </ol>
@@ -112,7 +112,7 @@
         <div class="setup-guide">
           <div class="sg-title">Don't have Ollama?</div>
           <div class="sg-step">1. Install: <code>curl -fsSL https://ollama.com/install.sh | sh</code></div>
-          <div class="sg-step">2. Pull model: <code>ollama pull gemma4:e4b-q4_K_M</code></div>
+          <div class="sg-step">2. Pull model: <code>ollama pull gemma4:e4b</code></div>
           <div class="sg-step">3. Start: <code>ollama serve</code></div>
           <div class="sg-step">4. Click Detect → above</div>
           <div class="sg-note">Requires ~3.2GB disk · 6GB RAM · Works on any laptop</div>
@@ -232,7 +232,7 @@
         modelEl.textContent = data.model || "No compatible model found";
         modelEl.style.color = data.model ? "#4ADE80" : "#F87171";
         if (!data.model) {
-          showToast("No model found. Run: ollama pull gemma4:e4b-q4_K_M", "warn");
+          showToast("No model found. Run: ollama pull gemma4:e4b", "warn");
         }
       } catch (e) {
         const statusEl = document.getElementById("mscStatus");
