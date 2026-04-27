@@ -109,7 +109,7 @@
           </div>
         </div>
 
-        <div class="setup-guide">
+        <div class="setup-guide" id="setupGuide">
           <div class="sg-title">Don't have Ollama?</div>
           <div class="sg-step">1. Install: <code>curl -fsSL https://ollama.com/install.sh | sh</code></div>
           <div class="sg-step">2. Pull model: <code>ollama pull gemma4:e4b</code></div>
@@ -220,6 +220,22 @@
     function openLLMModal() {
       document.getElementById("llmModal").classList.add("open");
       document.getElementById("ollamaUrl").value = getLLMConfig().ollama_url;
+      
+      const isHostedOrigin = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
+      const setupGuide = document.getElementById("setupGuide");
+      if (isHostedOrigin) {
+        setupGuide.innerHTML = `
+          <div class="sg-title">Hosted Demo Mode</div>
+          <div class="sg-step">This demo uses a Hugging Face Space for inference.</div>
+          <div class="sg-step">To use your local Ollama instance with zero latency:</div>
+          <div class="sg-step" style="margin-top: 8px;">1. Clone the repo:</div>
+          <div class="sg-step"><code>git clone https://github.com/Charan-suresh/KnowLedge.git</code></div>
+          <div class="sg-step">2. Run: <code>uvicorn knowledge.main:app</code></div>
+          <div class="sg-step">3. Open <a href="http://localhost:8000" target="_blank">localhost:8000</a></div>
+        `;
+        document.getElementById("ollamaUrl").readOnly = true;
+      }
+      
       detectModel();
     }
 
