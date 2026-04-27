@@ -22,3 +22,10 @@ REQUIRED_MODEL = (os.getenv("REQUIRED_MODEL") or "gemma4:e4b").strip().lower() o
 STRICT_REQUIRED_MODEL = os.getenv("STRICT_REQUIRED_MODEL", "true").lower() == "true"
 DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
 DB_PATH = str(BASE_DIR / "data" / "knowledge.db")
+INFERENCE_BACKEND = os.getenv("INFERENCE_BACKEND", "ollama").strip().lower()
+HF_SPACE_URL = os.getenv("HF_SPACE_URL", "").strip()
+
+# If using huggingface space, and OLLAMA_BASE_URL is not explicitly set, use HF space URL
+if INFERENCE_BACKEND == "huggingface" and HF_SPACE_URL and OLLAMA_BASE_URL == DEFAULT_OLLAMA_BASE_URL:
+    OLLAMA_BASE_URL = HF_SPACE_URL
+
