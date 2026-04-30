@@ -1,16 +1,15 @@
 """
 KnowLedge Inference — inference.py
 
-Runs entirely on CPU on the standard free HF Spaces tier (no ZeroGPU).
+Runs on CPU using transformers library for better HF Spaces compatibility.
 
 Model backends
 --------------
-E4B  : unsloth/gemma-4-4b-it-GGUF loaded via llama-cpp-python (CPU, n_gpu_layers=0).
+E4B  : unsloth/gemma-4-4b-it loaded via transformers (CPU).
 """
 
 import logging
-
-from huggingface_hub import hf_hub_download
+from typing import Optional
 
 # ── spaces stub — GPU decorator is a no-op on the free CPU tier ───────────────
 try:
@@ -25,54 +24,72 @@ except ModuleNotFoundError:
 
     spaces = _SpacesStub()
 
-# ── llama-cpp-python ──────────────────────────────────────────────────────────
+# ── transformers ──────────────────────────────────────────────────────────────
 try:
-    from llama_cpp import Llama
+    from transformers import AutoTokenizer, AutoModelForCausalLM
+    import torch
 except ModuleNotFoundError:
-    Llama = None
+    AutoTokenizer = None
+    AutoModelForCausalLM = None
+    torch = None
 
 
-MODEL_REPO = "unsloth/gemma-4-4b-it-GGUF"
-MODEL_FILE = "gemma-4-4b-it-Q4_K_M.gguf"
+MODEL_REPO = "unsloth/gemma-4-4b-it"
 
-_llm = None
+_tokenizer = None
+_model = None
 logger = logging.getLogger(__name__)
 
 
 def load_model():
-    global _llm
-    if _llm is None:
-        if Llama is None:
+    global _tokenizer, _model
+    if _model is None:
+        if AutoTokenizer is None or AutoModelForCausalLM is None:
             raise RuntimeError(
-                "llama-cpp-python is not installed. "
+                "transformers is not installed. "
                 "Add it to hf_space/requirements.txt."
             )
-        model_path = str(hf_hub_download(
-            repo_id=MODEL_REPO,
-            filename=MODEL_FILE
-        ))
-
-        _llm = Llama(
-            model_path=model_path,
-            n_ctx=4096,
-            n_threads=4
+        
+        logger.info(f"Loading model {MODEL_REPO}...")
+        _tokenizer = AutoTokenizer.from_pretrained(MODEL_REPO)
+        _model = AutoModelForCausalLM.from_pretrained(
+            MODEL_REPO,
+            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+            device_map="auto" if torch.cuda.is_available() else "cpu",
+            trust_remote_code=True
         )
-    return _llm
+        logger.info("Model loaded successfully")
+    
+    return _tokenizer, _model
 
 
 @spaces.GPU(duration=90)
 def generate_text(model_name: str, prompt: str, max_new_tokens: int = 512) -> str:
     try:
-        llm = load_model()
-
-        output = llm(
-            str(prompt),
-            max_tokens=max_new_tokens,
-            temperature=0.7,
-            top_p=0.95
+        tokenizer, model = load_model()
+        
+        # Format prompt for Gemma
+        formatted_prompt = f"<bos><start_of_turn>user\n{prompt}<end_of_turn>\n<start_of_turn>model\n"
+        
+        inputs = tokenizer(formatted_prompt, return_tensors="pt")
+        
+        with torch.no_grad():
+            outputs = model.generate(
+                **inputs,
+                max_new_tokens=max_new_tokens,
+                temperature=0.7,
+                top_p=0.95,
+                do_sample=True,
+                pad_token_id=tokenizer.eos_token_id
+            )
+        
+        # Decode only the new tokens
+        response = tokenizer.decode(
+            outputs[0][inputs.input_ids.shape[1]:], 
+            skip_special_tokens=True
         )
-
-        return output["choices"][0]["text"]
+        
+        return response.strip()
 
     except Exception:
         logger.exception("Text generation failed")
@@ -82,18 +99,9 @@ def generate_text(model_name: str, prompt: str, max_new_tokens: int = 512) -> st
 @spaces.GPU(duration=120)
 def generate_with_image(prompt: str, image_base64: str, max_new_tokens: int = 512) -> str:
     try:
-        llm = load_model()
-
-        text_prompt = f"{prompt}\n\n[Image provided]"
-
-        output = llm(
-            str(text_prompt),
-            max_tokens=max_new_tokens,
-            temperature=0.7,
-            top_p=0.95
-        )
-
-        return output["choices"][0]["text"]
+        # For now, treat as text-only since Gemma 4 vision support varies
+        text_prompt = f"{prompt}\n\n[Image provided - analyzing as text prompt]"
+        return generate_text("e4b", text_prompt, max_new_tokens)
 
     except Exception:
         logger.exception("Vision generation failed")
@@ -102,7 +110,20 @@ def generate_with_image(prompt: str, image_base64: str, max_new_tokens: int = 51
 
 @spaces.GPU(duration=60)
 def health_check() -> dict:
-    return {
-        "status": "ok",
-        "model_loaded": _llm is not None,
-    }
+    try:
+        tokenizer, model = load_model()
+        return {
+            "status": "ok",
+            "model_loaded": True,
+            "backend": "transformers",
+            "model_repo": MODEL_REPO,
+            "device": str(next(model.parameters()).device) if model else "unknown"
+        }
+    except Exception as e:
+        return {
+            "status": "error", 
+            "model_loaded": False,
+            "backend": "transformers",
+            "model_repo": MODEL_REPO,
+            "error": str(e)
+        }
