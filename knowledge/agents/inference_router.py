@@ -112,11 +112,23 @@ def chat(
             payload["prompt"] = f"{prompt}\n\nAvailable tools: {tool_names}. Follow the instructions exactly."
 
     try:
-        response = httpx.post(f"{base_url}{endpoint}", json=payload, timeout=120.0)
+        response = httpx.post(f"{base_url}{endpoint}", json=payload, timeout=300.0)
         response.raise_for_status()
         body = response.json()
         text = (body.get("response") or body.get("text") or body.get("output") or "").strip()
         return _tool_call_response(text, tools)
+    except httpx.TimeoutException:
+        raise RuntimeError(
+            "HF Space timeout: Model is loading (first request can take 2-3 minutes). "
+            "Please wait and try again."
+        )
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 500:
+            raise RuntimeError(
+                "HF Space error 500: Model may still be loading. "
+                "Check https://huggingface.co/spaces/charan-ml/knowledge-inference for status."
+            )
+        raise RuntimeError(f"HF Space HTTP {exc.response.status_code}: {exc}") from exc
     except Exception as exc:
         raise RuntimeError(f"HF Space error: {exc}") from exc
 
