@@ -6,30 +6,61 @@
   <title>{% block title %}KnowLedge{% endblock %}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Manrope:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/knowledge.css">
   {% block head %}{% endblock %}
 </head>
 <body>
+
+  <!-- Loading Screen -->
   <div id="loadingScreen" class="loading-screen">
     <div class="loading-shell">
-      <div class="loading-badge">KnowLedge</div>
-      <h1>Local-first learning debt tracking</h1>
-      <p id="loadingMsg">Connecting to local Gemma 4...</p>
+      <div class="loading-top">
+        <div class="loading-logo">
+          <span class="loading-logo-mark">K</span>
+          <span class="loading-logo-text">KnowLedge</span>
+        </div>
+        {% if inference_backend == "hf_space" or demo_mode %}
+        <div class="loading-backend-pill">Gemma 4 · HF Space</div>
+        {% else %}
+        <div class="loading-backend-pill">Gemma 4 · Local</div>
+        {% endif %}
+      </div>
+      <h1 class="loading-headline">Every student deserves a<br><em>personal Socratic tutor.</em></h1>
+      <p id="loadingMsg" class="loading-sub">
+        {% if inference_backend == "hf_space" or demo_mode %}
+        Warming up Gemma 4 on HF Space…
+        {% else %}
+        Connecting to local Gemma 4…
+        {% endif %}
+      </p>
       <div class="loading-dots"><span></span><span></span><span></span></div>
+
+      <!-- Only shown for local Ollama users when model not found -->
       <div id="ollamaHelp" style="display:none" class="ollama-help">
-        <p>Ollama is not running on this machine.</p>
-        <p>To use KnowLedge locally:</p>
+        <p><strong>Ollama not detected.</strong> To run locally:</p>
         <ol>
-          <li>Install Ollama: <a href="https://ollama.com" target="_blank" rel="noreferrer">ollama.com</a></li>
+          <li>Install Ollama at <a href="https://ollama.com" target="_blank" rel="noreferrer">ollama.com</a></li>
           <li>Run: <code>ollama pull gemma4:e4b</code></li>
           <li>Run: <code>ollama serve</code></li>
           <li>Refresh this page</li>
         </ol>
-        <p class="hint">Model size: ~3.2GB · Needs 6GB RAM</p>
+        <p class="hint">~3.2 GB download · Runs on any laptop with 6 GB RAM</p>
+        <button class="btn btn-ghost" style="margin-top:12px" onclick="skipLoading()">Continue without AI →</button>
       </div>
     </div>
   </div>
+
+  {% if demo_mode or inference_backend == "hf_space" %}
+  <!-- Demo / HF Space banner -->
+  <div class="demo-banner" id="demoBanner">
+    <div class="demo-banner-inner">
+      <span class="demo-badge">DEMO</span>
+      <span>Powered by <strong>Gemma 4</strong> on Hugging Face Space · First request may take ~60 s while the model warms up</span>
+      <a href="https://github.com/Charan-suresh/KnowLedge" target="_blank" rel="noreferrer" class="demo-banner-link">Run locally →</a>
+    </div>
+  </div>
+  {% endif %}
 
   <div class="app-shell">
     <aside class="sidebar">
@@ -38,26 +69,44 @@
           <span class="brand-mark">K</span>
           <span>
             <strong>KnowLedge</strong>
-            <small>Single-model local tutor</small>
+            <small>AI Learning Debt Tracker</small>
           </span>
         </a>
 
         <nav class="nav-links">
-          <a href="/ledger" class="{% if request.url.path == '/ledger' %}active{% endif %}">Ledger</a>
-          <a href="/progress" class="{% if request.url.path == '/progress' %}active{% endif %}">Progress</a>
-          <a href="/reports" class="{% if request.url.path == '/reports' %}active{% endif %}">Reports</a>
-          <a href="/help" class="{% if request.url.path == '/help' %}active{% endif %}">Help</a>
+          <a href="/ledger"   class="{% if request.url.path == '/ledger'   %}active{% endif %}">
+            <span class="nav-icon">📒</span> Ledger
+          </a>
+          <a href="/progress" class="{% if request.url.path == '/progress' %}active{% endif %}">
+            <span class="nav-icon">📈</span> Progress
+          </a>
+          <a href="/reports"  class="{% if request.url.path == '/reports'  %}active{% endif %}">
+            <span class="nav-icon">🎓</span> Reports
+          </a>
+          <a href="/help"     class="{% if request.url.path == '/help'     %}active{% endif %}">
+            <span class="nav-icon">💡</span> Help
+          </a>
         </nav>
       </div>
 
       <div class="sidebar-foot">
         <div class="status-chip" id="navStatus">
-          <span class="dot"></span>
-          <span id="navStatusText">Checking Ollama...</span>
+          <span class="dot" id="navDot"></span>
+          <span id="navStatusText">Checking model…</span>
         </div>
+
+        {% if inference_backend == "hf_space" or demo_mode %}
+        <div class="backend-chip">
+          <span class="backend-icon">🤗</span>
+          <span>Gemma 4 · HF Space</span>
+        </div>
+        <button class="btn btn-ghost full" type="button" onclick="openInfoModal()">AI Backend Info</button>
+        {% else %}
         <button class="btn btn-ghost full" type="button" onclick="openLLMModal()">Configure Ollama</button>
+        {% endif %}
+
         {% if demo_mode %}
-        <a class="btn btn-ghost full" href="/demo">Load Demo Data</a>
+        <a class="btn btn-accent full" href="/demo">↺ Reset Demo Data</a>
         {% endif %}
       </div>
     </aside>
@@ -69,8 +118,17 @@
           <h1>{% block page_title %}KnowLedge{% endblock %}</h1>
         </div>
         <div class="topbar-actions">
-          <div class="student-chip">Student <span id="studentBadge">{{ student_id }}</span></div>
+          <div class="student-chip">
+            <span class="student-icon">👤</span>
+            <span id="studentBadge">{{ student_id }}</span>
+          </div>
+          {% if inference_backend == "hf_space" or demo_mode %}
+          <button class="btn btn-primary" type="button" onclick="openInfoModal()">
+            <span>🤗 Gemma 4</span>
+          </button>
+          {% else %}
           <button class="btn btn-primary" type="button" onclick="openLLMModal()">⚙ Ollama</button>
+          {% endif %}
         </div>
       </header>
 
@@ -80,45 +138,74 @@
     </main>
   </div>
 
+  <!-- HF Space Info Modal (demo mode) -->
+  <div class="llm-modal" id="infoModal">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h3>🤗 AI Backend: Gemma 4 on HF Space</h3>
+        <button class="icon-btn" type="button" onclick="closeInfoModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="model-status-card" id="hfStatusCard">
+          <div class="msc-row">
+            <span class="msc-label">Status</span>
+            <span id="hfStatus">Checking…</span>
+          </div>
+          <div class="msc-row">
+            <span class="msc-label">Model</span>
+            <span id="hfModel">Gemma 4 (unsloth/gemma-4-4b-it)</span>
+          </div>
+          <div class="msc-row">
+            <span class="msc-label">Roles</span>
+            <span class="muted-copy">Scout · Sage · Lens · Solo</span>
+          </div>
+          <div class="msc-row">
+            <span class="msc-label">Cold start</span>
+            <span class="muted-copy">Up to ~60 s on first request</span>
+          </div>
+        </div>
+        <div class="setup-guide">
+          <div class="sg-title">Want zero latency? Run locally</div>
+          <div class="sg-step">1. Clone: <code>git clone https://github.com/Charan-suresh/KnowLedge.git</code></div>
+          <div class="sg-step">2. Pull model: <code>ollama pull gemma4:e4b</code></div>
+          <div class="sg-step">3. Start: <code>uvicorn knowledge.main:app</code></div>
+          <div class="sg-note">All inference runs on your machine · No API keys needed</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" type="button" onclick="closeInfoModal()">Close</button>
+        <button class="btn btn-primary" type="button" onclick="checkHFStatus()">Check Status</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ollama Configuration Modal (local mode) -->
   <div class="llm-modal" id="llmModal">
     <div class="modal-panel">
       <div class="modal-header">
         <h3>⚙️ Ollama Configuration</h3>
         <button class="icon-btn" type="button" onclick="closeLLMModal()">✕</button>
       </div>
-
       <div class="modal-body">
         <label class="field-label">Ollama Server URL</label>
         <div class="url-row">
           <input type="text" id="ollamaUrl" value="{{ default_ollama_url }}" placeholder="http://localhost:11434">
           <button class="btn btn-primary" type="button" onclick="detectModel()" id="detectBtn">Detect →</button>
         </div>
-
         <div class="model-status-card" id="modelCard">
-          <div class="msc-row">
-            <span class="msc-label">Status</span>
-            <span id="mscStatus">—</span>
-          </div>
-          <div class="msc-row">
-            <span class="msc-label">Active model</span>
-            <span id="mscModel">—</span>
-          </div>
-          <div class="msc-row">
-            <span class="msc-label">Roles</span>
-            <span class="muted-copy">Scout · Sage · Lens · Solo (all one model)</span>
-          </div>
+          <div class="msc-row"><span class="msc-label">Status</span><span id="mscStatus">—</span></div>
+          <div class="msc-row"><span class="msc-label">Active model</span><span id="mscModel">—</span></div>
+          <div class="msc-row"><span class="msc-label">Roles</span><span class="muted-copy">Scout · Sage · Lens · Solo</span></div>
         </div>
-
         <div class="setup-guide" id="setupGuide">
           <div class="sg-title">Don't have Ollama?</div>
           <div class="sg-step">1. Install: <code>curl -fsSL https://ollama.com/install.sh | sh</code></div>
           <div class="sg-step">2. Pull model: <code>ollama pull gemma4:e4b</code></div>
           <div class="sg-step">3. Start: <code>ollama serve</code></div>
           <div class="sg-step">4. Click Detect → above</div>
-          <div class="sg-note">Requires ~3.2GB disk · 6GB RAM · Works on any laptop</div>
+          <div class="sg-note">Requires ~3.2 GB disk · 6 GB RAM · Works on any laptop</div>
         </div>
       </div>
-
       <div class="modal-footer">
         <button class="btn btn-ghost" type="button" onclick="closeLLMModal()">Cancel</button>
         <button class="btn btn-primary" type="button" onclick="saveLLMConfig()">Save & Apply</button>
@@ -126,18 +213,43 @@
     </div>
   </div>
 
+  <!-- Sage Chat Modal -->
   <div class="llm-modal" id="sageModal">
     <div class="modal-panel modal-panel-wide">
       <div class="modal-header">
-        <h3 id="sageTitle">Sage Session</h3>
+        <div>
+          <div class="modal-subtitle">Sage · Socratic Tutor</div>
+          <h3 id="sageTitle">Clearing Concept</h3>
+        </div>
         <button class="icon-btn" type="button" onclick="closeSageModal()">✕</button>
       </div>
       <div class="modal-body">
         <div id="sageConversation" class="conversation"></div>
       </div>
       <div class="modal-footer sage-footer">
-        <input type="text" id="sageInput" placeholder="Reply in your own words..." onkeydown="if(event.key==='Enter'){sendSageMessage();}">
+        <input type="text" id="sageInput" placeholder="Reply in your own words…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){sendSageMessage();}">
         <button class="btn btn-primary" type="button" onclick="sendSageMessage()" id="sageSendBtn">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Solo Mode Modal -->
+  <div class="llm-modal" id="soloModal">
+    <div class="modal-panel modal-panel-wide">
+      <div class="modal-header">
+        <div>
+          <div class="modal-subtitle">Solo Mode · Timed Test</div>
+          <h3 id="soloTitle">Testing Concept</h3>
+        </div>
+        <button class="icon-btn" type="button" onclick="closeSoloModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="soloQuestion" class="solo-question-card"></div>
+        <div id="soloResult" class="solo-result" style="display:none"></div>
+      </div>
+      <div class="modal-footer sage-footer" id="soloFooter">
+        <textarea id="soloAnswer" rows="4" placeholder="Explain this concept in your own words. Be specific and concrete…"></textarea>
+        <button class="btn btn-primary" type="button" onclick="submitSoloAnswer()" id="soloSubmitBtn">Submit Answer</button>
       </div>
     </div>
   </div>
@@ -145,31 +257,21 @@
   <div id="toastHost" class="toast-host"></div>
 
   <script>
-    const DEFAULT_OLLAMA_URL = {{ default_ollama_url|tojson }};
-    const LOADING_MESSAGES = [
-      "Connecting to local Gemma 4...",
-      "Checking Ollama...",
-      "Almost ready...",
-    ];
-    let msgIdx = 0;
-    let currentSageConceptId = "";
-    let currentSageConcept = "";
-    let currentSageHistory = [];
+    // ── Constants ────────────────────────────────────────────────────────────
+    const DEFAULT_OLLAMA_URL   = {{ default_ollama_url|tojson }};
+    const INFERENCE_BACKEND    = {{ inference_backend|tojson }};
+    const HF_SPACE_URL         = {{ hf_space_url|tojson }};
+    const IS_HF_BACKEND        = INFERENCE_BACKEND === "hf_space";
+    const IS_DEMO              = {{ demo_mode|tojson }};
+    const IS_HOSTED_ORIGIN     = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
 
-    function isLocalOllamaUrl(url) {
-      try {
-        const parsed = new URL(url);
-        return ["localhost", "127.0.0.1"].includes(parsed.hostname);
-      } catch (e) {
-        return false;
-      }
-    }
+    let currentSageConceptId   = "";
+    let currentSageConcept     = "";
+    let currentSageHistory     = [];
+    let currentSoloConcept     = "";
+    let currentSoloConceptId   = "";
 
-    function preferHostedDefault(storedUrl) {
-      const isHostedOrigin = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
-      return isHostedOrigin && isLocalOllamaUrl(storedUrl) && !isLocalOllamaUrl(DEFAULT_OLLAMA_URL);
-    }
-
+    // ── Helpers ──────────────────────────────────────────────────────────────
     function getCookie(name) {
       const value = `; ${document.cookie}`;
       const parts = value.split(`; ${name}=`);
@@ -190,21 +292,15 @@
     }
 
     function getLLMConfig() {
-      const storedUrl = localStorage.getItem("ollama_url");
-      if (storedUrl && !preferHostedDefault(storedUrl)) {
-        return { ollama_url: storedUrl };
+      if (IS_HF_BACKEND || IS_DEMO) {
+        return { ollama_url: DEFAULT_OLLAMA_URL };
       }
-      return {
-        ollama_url: DEFAULT_OLLAMA_URL,
-      };
+      const stored = localStorage.getItem("ollama_url");
+      return { ollama_url: stored || DEFAULT_OLLAMA_URL };
     }
 
     function apiBody(extra = {}) {
-      return {
-        ...extra,
-        ollama_url: getLLMConfig().ollama_url,
-        student_id: getStudentId(),
-      };
+      return { ...extra, ollama_url: getLLMConfig().ollama_url, student_id: getStudentId() };
     }
 
     function showToast(message, tone = "ok") {
@@ -213,114 +309,47 @@
       toast.className = `toast toast-${tone}`;
       toast.textContent = message;
       host.appendChild(toast);
-      setTimeout(() => toast.classList.add("hide"), 2600);
-      setTimeout(() => toast.remove(), 3000);
+      setTimeout(() => toast.classList.add("hide"), 2800);
+      setTimeout(() => toast.remove(), 3200);
     }
 
-    function openLLMModal() {
-      document.getElementById("llmModal").classList.add("open");
-      document.getElementById("ollamaUrl").value = getLLMConfig().ollama_url;
-      
-      const isHostedOrigin = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
-      const setupGuide = document.getElementById("setupGuide");
-      if (isHostedOrigin) {
-        setupGuide.innerHTML = `
-          <div class="sg-title">Hosted Demo Mode</div>
-          <div class="sg-step">This demo uses a Hugging Face Space for inference.</div>
-          <div class="sg-step">To use your local Ollama instance with zero latency:</div>
-          <div class="sg-step" style="margin-top: 8px;">1. Clone the repo:</div>
-          <div class="sg-step"><code>git clone https://github.com/Charan-suresh/KnowLedge.git</code></div>
-          <div class="sg-step">2. Run: <code>uvicorn knowledge.main:app</code></div>
-          <div class="sg-step">3. Open <a href="http://localhost:8000" target="_blank">localhost:8000</a></div>
-        `;
-        document.getElementById("ollamaUrl").readOnly = true;
-      }
-      
-      detectModel();
-    }
-
-    function closeLLMModal() {
-      document.getElementById("llmModal").classList.remove("open");
-    }
-
-    function saveLLMConfig() {
-      const url = document.getElementById("ollamaUrl").value.trim() || DEFAULT_OLLAMA_URL;
-      localStorage.setItem("ollama_url", url);
-      closeLLMModal();
-      checkAppStatus();
-      showToast("Ollama URL saved");
-    }
-
-    async function detectModel() {
-      const url = document.getElementById("ollamaUrl").value.trim() || DEFAULT_OLLAMA_URL;
-      const btn = document.getElementById("detectBtn");
-      btn.textContent = "Checking...";
-      btn.disabled = true;
-      try {
-        const r = await fetch(`/api/status?ollama_url=${encodeURIComponent(url)}`);
-        const data = await r.json();
-        const statusEl = document.getElementById("mscStatus");
-        const modelEl = document.getElementById("mscModel");
-        const requiredLoaded = data.required_model_loaded ?? data.ready;
-        if (!data.ollama_running) {
-          statusEl.textContent = "✗ Not reachable";
-          statusEl.style.color = "#F87171";
-        } else if (requiredLoaded) {
-          statusEl.textContent = "✓ Required model ready";
-          statusEl.style.color = "#4ADE80";
-        } else {
-          statusEl.textContent = `✗ Required model missing (${data.required_model || "gemma4:e4b"})`;
-          statusEl.style.color = "#FBBF24";
-        }
-        modelEl.textContent = data.model || "No compatible model found";
-        modelEl.style.color = requiredLoaded ? "#4ADE80" : "#F87171";
-        if (!requiredLoaded) {
-          showToast("No model found. Run: ollama pull gemma4:e4b", "warn");
-        }
-      } catch (e) {
-        const statusEl = document.getElementById("mscStatus");
-        statusEl.textContent = "✗ Cannot reach Ollama";
-        statusEl.style.color = "#F87171";
-      } finally {
-        btn.textContent = "Detect →";
-        btn.disabled = false;
-      }
-    }
-
-    async function checkAppStatus() {
-      try {
-        const r = await fetch(`/api/status?ollama_url=${encodeURIComponent(getLLMConfig().ollama_url)}`);
-        const data = await r.json();
-        const statusText = document.getElementById("navStatusText");
-        const dot = document.querySelector("#navStatus .dot");
-        if (data.ready) {
-          statusText.textContent = `Gemma 4 ready · ${data.model}`;
-          dot.classList.add("ready");
-        } else if (!data.ollama_running) {
-          statusText.textContent = "Ollama offline";
-          dot.classList.remove("ready");
-        } else {
-          statusText.textContent = "Compatible model not found";
-          dot.classList.remove("ready");
-        }
-        if (data.ollama_url && preferHostedDefault(localStorage.getItem("ollama_url") || "")) {
-          localStorage.removeItem("ollama_url");
-        }
-      } catch (e) {
-        document.getElementById("navStatusText").textContent = "Status unavailable";
-      }
+    // ── Loading Screen ───────────────────────────────────────────────────────
+    function skipLoading() {
+      const screenEl = document.getElementById("loadingScreen");
+      if (!screenEl) return;
+      screenEl.style.opacity = "0";
+      setTimeout(() => { screenEl.style.display = "none"; }, 400);
     }
 
     async function waitForModel() {
-      const msgEl = document.getElementById("loadingMsg");
+      const msgEl    = document.getElementById("loadingMsg");
       const screenEl = document.getElementById("loadingScreen");
       if (!screenEl) return;
 
+      // ── HF Space / demo mode: brief brand splash then proceed ──────────────
+      if (IS_HF_BACKEND || IS_DEMO) {
+        const hfMessages = [
+          "Warming up Gemma 4 on HF Space…",
+          "Initialising AI tutoring modules…",
+          "Almost ready…",
+        ];
+        let idx = 0;
+        const ticker = setInterval(() => {
+          if (idx < hfMessages.length - 1) { idx++; if (msgEl) msgEl.textContent = hfMessages[idx]; }
+        }, 900);
+        await new Promise(res => setTimeout(res, 1800));
+        clearInterval(ticker);
+        skipLoading();
+        // Poll status in background (non-blocking)
+        setTimeout(checkAppStatus, 500);
+        return;
+      }
+
+      // ── Local Ollama: blocking wait ────────────────────────────────────────
+      const ollamaMessages = ["Connecting to local Gemma 4…", "Checking Ollama…", "Almost ready…"];
+      let msgIdx = 0;
       const interval = setInterval(() => {
-        if (msgEl && msgIdx < LOADING_MESSAGES.length - 1) {
-          msgIdx++;
-          msgEl.textContent = LOADING_MESSAGES[msgIdx];
-        }
+        if (msgIdx < ollamaMessages.length - 1) { msgIdx++; if (msgEl) msgEl.textContent = ollamaMessages[msgIdx]; }
       }, 2500);
 
       while (true) {
@@ -331,18 +360,13 @@
             clearInterval(interval);
             if (msgEl) msgEl.textContent = `Gemma 4 ready · ${d.model}`;
             await new Promise(res => setTimeout(res, 600));
-            screenEl.style.opacity = "0";
-            await new Promise(res => setTimeout(res, 400));
-            screenEl.style.display = "none";
+            skipLoading();
             checkAppStatus();
             return;
           }
           if (!d.ollama_running) {
             clearInterval(interval);
-            if (msgEl) {
-              msgEl.textContent = "⚠ Ollama not running";
-              msgEl.style.color = "#FBBF24";
-            }
+            if (msgEl) { msgEl.textContent = "⚠ Ollama not running"; msgEl.style.color = "#FBBF24"; }
             document.getElementById("ollamaHelp")?.style.setProperty("display", "block");
             checkAppStatus();
             return;
@@ -352,67 +376,258 @@
       }
     }
 
+    // ── Status Polling ───────────────────────────────────────────────────────
+    async function checkAppStatus() {
+      try {
+        const url = getLLMConfig().ollama_url;
+        const r = await fetch(`/api/status?ollama_url=${encodeURIComponent(url)}`);
+        const data = await r.json();
+        updateNavStatus(data);
+      } catch (e) {
+        document.getElementById("navStatusText").textContent = "Status unavailable";
+      }
+    }
+
+    function updateNavStatus(data) {
+      const statusText = document.getElementById("navStatusText");
+      const dot        = document.getElementById("navDot");
+      if (!statusText || !dot) return;
+      if (data.ready) {
+        const label = IS_HF_BACKEND ? "Gemma 4 · HF Space" : `Gemma 4 ready · ${data.model}`;
+        statusText.textContent = label;
+        dot.classList.add("ready");
+      } else if (IS_HF_BACKEND && !data.ollama_running) {
+        statusText.textContent = "HF Space warming up…";
+        dot.classList.remove("ready");
+      } else if (!data.ollama_running) {
+        statusText.textContent = "Ollama offline";
+        dot.classList.remove("ready");
+      } else {
+        statusText.textContent = "Model not found";
+        dot.classList.remove("ready");
+      }
+    }
+
+    // ── HF Space Info Modal ──────────────────────────────────────────────────
+    function openInfoModal() {
+      document.getElementById("infoModal").classList.add("open");
+      checkHFStatus();
+    }
+    function closeInfoModal() {
+      document.getElementById("infoModal").classList.remove("open");
+    }
+    async function checkHFStatus() {
+      const statusEl = document.getElementById("hfStatus");
+      const modelEl  = document.getElementById("hfModel");
+      if (!statusEl) return;
+      statusEl.textContent = "Checking…";
+      try {
+        const url = getLLMConfig().ollama_url;
+        const r = await fetch(`/api/status?ollama_url=${encodeURIComponent(url)}`);
+        const data = await r.json();
+        if (data.ready) {
+          statusEl.textContent = "✓ Model ready";
+          statusEl.style.color = "#4ADE80";
+        } else if (data.ollama_running) {
+          statusEl.textContent = "⚡ Model loading (cold start)";
+          statusEl.style.color = "#FBBF24";
+        } else {
+          statusEl.textContent = "✗ Space offline";
+          statusEl.style.color = "#F87171";
+        }
+        if (data.model && modelEl) modelEl.textContent = data.model;
+      } catch (e) {
+        statusEl.textContent = "✗ Cannot reach backend";
+        statusEl.style.color = "#F87171";
+      }
+    }
+
+    // ── Ollama Modal ─────────────────────────────────────────────────────────
+    function openLLMModal() {
+      document.getElementById("llmModal").classList.add("open");
+      document.getElementById("ollamaUrl").value = getLLMConfig().ollama_url;
+      detectModel();
+    }
+    function closeLLMModal() { document.getElementById("llmModal").classList.remove("open"); }
+    function saveLLMConfig() {
+      const url = document.getElementById("ollamaUrl").value.trim() || DEFAULT_OLLAMA_URL;
+      localStorage.setItem("ollama_url", url);
+      closeLLMModal();
+      checkAppStatus();
+      showToast("Ollama URL saved");
+    }
+    async function detectModel() {
+      const url = document.getElementById("ollamaUrl")?.value.trim() || DEFAULT_OLLAMA_URL;
+      const btn = document.getElementById("detectBtn");
+      if (btn) { btn.textContent = "Checking…"; btn.disabled = true; }
+      try {
+        const r = await fetch(`/api/status?ollama_url=${encodeURIComponent(url)}`);
+        const data = await r.json();
+        const statusEl = document.getElementById("mscStatus");
+        const modelEl  = document.getElementById("mscModel");
+        const ready = data.required_model_loaded ?? data.ready;
+        if (statusEl) {
+          statusEl.textContent = !data.ollama_running ? "✗ Not reachable"
+            : ready ? "✓ Required model ready"
+            : `✗ Missing: ${data.required_model || "gemma4:e4b"}`;
+          statusEl.style.color = !data.ollama_running ? "#F87171" : ready ? "#4ADE80" : "#FBBF24";
+        }
+        if (modelEl) {
+          modelEl.textContent = data.model || "No model found";
+          modelEl.style.color = ready ? "#4ADE80" : "#F87171";
+        }
+      } catch (e) {
+        const statusEl = document.getElementById("mscStatus");
+        if (statusEl) { statusEl.textContent = "✗ Cannot reach Ollama"; statusEl.style.color = "#F87171"; }
+      } finally {
+        if (btn) { btn.textContent = "Detect →"; btn.disabled = false; }
+      }
+    }
+
+    // ── Sage Modal ───────────────────────────────────────────────────────────
     function openSage(conceptId, conceptName) {
       currentSageConceptId = conceptId;
-      currentSageConcept = conceptName;
-      currentSageHistory = [];
-      document.getElementById("sageTitle").textContent = `Sage · ${conceptName}`;
+      currentSageConcept   = conceptName;
+      currentSageHistory   = [];
+      document.getElementById("sageTitle").textContent = conceptName;
       document.getElementById("sageConversation").innerHTML = `
-        <div class="bubble bubble-sage">Let's clear <strong>${conceptName}</strong>. Explain it in your own words.</div>
-      `;
+        <div class="bubble bubble-sage">
+          <span class="bubble-label">Sage</span>
+          Let's clear <strong>${conceptName}</strong>. Explain it to me in your own words — pretend I've never heard of it.
+        </div>`;
       document.getElementById("sageInput").value = "";
       document.getElementById("sageModal").classList.add("open");
-      document.getElementById("sageInput").focus();
+      setTimeout(() => document.getElementById("sageInput").focus(), 100);
     }
 
-    function closeSageModal() {
-      document.getElementById("sageModal").classList.remove("open");
-    }
+    function closeSageModal() { document.getElementById("sageModal").classList.remove("open"); }
 
     async function sendSageMessage() {
-      const input = document.getElementById("sageInput");
-      const btn = document.getElementById("sageSendBtn");
+      const input   = document.getElementById("sageInput");
+      const btn     = document.getElementById("sageSendBtn");
       const message = input.value.trim();
       if (!message) return;
 
       const convo = document.getElementById("sageConversation");
-      convo.insertAdjacentHTML("beforeend", `<div class="bubble bubble-student">${message}</div>`);
+      convo.insertAdjacentHTML("beforeend", `<div class="bubble bubble-student"><span class="bubble-label">You</span>${escapeHtml(message)}</div>`);
       currentSageHistory.push({ role: "user", content: message });
       input.value = "";
       btn.disabled = true;
+
+      const thinking = document.createElement("div");
+      thinking.className = "bubble bubble-sage bubble-thinking";
+      thinking.innerHTML = `<span class="bubble-label">Sage</span><span class="thinking-dots"><span></span><span></span><span></span></span>`;
+      convo.appendChild(thinking);
+      convo.scrollTop = convo.scrollHeight;
 
       try {
         const r = await fetch("/api/sage", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(apiBody({
-            concept: currentSageConcept,
-            concept_id: currentSageConceptId,
-            history: currentSageHistory,
-            message,
-          })),
+          body: JSON.stringify(apiBody({ concept: currentSageConcept, concept_id: currentSageConceptId, history: currentSageHistory, message })),
         });
         const data = await r.json();
-        convo.insertAdjacentHTML("beforeend", `<div class="bubble bubble-sage">${data.reply}</div>`);
+        thinking.remove();
+        convo.insertAdjacentHTML("beforeend", `<div class="bubble bubble-sage"><span class="bubble-label">Sage</span>${escapeHtml(data.reply)}</div>`);
         currentSageHistory.push({ role: "assistant", content: data.reply });
         convo.scrollTop = convo.scrollHeight;
         if (data.cleared) {
-          showToast("Concept cleared");
-          await refreshLedger?.();
-          setTimeout(closeSageModal, 900);
+          convo.insertAdjacentHTML("beforeend", `<div class="cleared-banner">🎉 Concept cleared! This knowledge is now yours.</div>`);
+          showToast("🎉 Concept cleared!", "ok");
+          if (typeof refreshLedger === "function") await refreshLedger();
+          setTimeout(closeSageModal, 1200);
         }
       } catch (e) {
-        convo.insertAdjacentHTML("beforeend", `<div class="bubble bubble-sage">Sage could not respond. Check Ollama and try again.</div>`);
+        thinking.remove();
+        convo.insertAdjacentHTML("beforeend", `<div class="bubble bubble-sage"><span class="bubble-label">Sage</span>Could not reach the AI model. Please try again.</div>`);
+        showToast("AI model unavailable — try again", "error");
       } finally {
         btn.disabled = false;
         input.focus();
       }
     }
 
+    // ── Solo Modal ───────────────────────────────────────────────────────────
+    function openSolo(conceptId, conceptName) {
+      currentSoloConcept   = conceptName;
+      currentSoloConceptId = conceptId;
+      document.getElementById("soloTitle").textContent = conceptName;
+      document.getElementById("soloQuestion").innerHTML = `
+        <div class="solo-prompt">
+          <p class="eyebrow">Solo Mode · Timed Recall</p>
+          <p>Without looking anything up, explain <strong>${escapeHtml(conceptName)}</strong> as completely as you can in your own words. Include any relevant examples, edge cases, or relationships to other concepts.</p>
+        </div>`;
+      document.getElementById("soloResult").style.display = "none";
+      document.getElementById("soloAnswer").value = "";
+      document.getElementById("soloFooter").style.display = "flex";
+      document.getElementById("soloModal").classList.add("open");
+      setTimeout(() => document.getElementById("soloAnswer").focus(), 100);
+    }
+
+    function closeSoloModal() { document.getElementById("soloModal").classList.remove("open"); }
+
+    async function submitSoloAnswer() {
+      const answer = document.getElementById("soloAnswer").value.trim();
+      if (!answer || answer.length < 20) { showToast("Write a fuller answer to be evaluated", "warn"); return; }
+
+      const btn = document.getElementById("soloSubmitBtn");
+      btn.disabled = true;
+      btn.textContent = "Evaluating…";
+
+      try {
+        const r = await fetch("/api/solo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(apiBody({ concept: currentSoloConcept, answer, context: "" })),
+        });
+        const data = await r.json();
+        const resultEl = document.getElementById("soloResult");
+        const score = Math.round((data.score || 0) * 100);
+        const scoreColor = score >= 70 ? "#4ADE80" : score >= 50 ? "#FBBF24" : "#F87171";
+        const verdictIcon = data.verdict === "PASS" ? "✓" : data.verdict === "PARTIAL" ? "◑" : "✗";
+        resultEl.innerHTML = `
+          <div class="solo-score-row">
+            <div class="solo-score-ring" style="--score:${score};--color:${scoreColor}">
+              <span class="solo-score-num">${score}%</span>
+            </div>
+            <div>
+              <div class="solo-verdict">${verdictIcon} ${data.verdict || "EVALUATED"}</div>
+              <div class="solo-verdict-sub">${score >= 70 ? "Concept cleared!" : "Keep practising"}</div>
+            </div>
+          </div>
+          <div class="solo-feedback-grid">
+            <div class="solo-feedback-item solo-right"><strong>✓ What was right</strong><p>${escapeHtml(data.what_was_right || "—")}</p></div>
+            <div class="solo-feedback-item solo-missing"><strong>✗ What was missing</strong><p>${escapeHtml(data.what_was_missing || "—")}</p></div>
+          </div>
+          <div class="solo-next"><strong>Next step:</strong> ${escapeHtml(data.next_step || "—")}</div>`;
+        resultEl.style.display = "block";
+        document.getElementById("soloFooter").style.display = "none";
+        if (score >= 70) {
+          showToast("🎉 Solo passed! Concept cleared.", "ok");
+          if (typeof refreshLedger === "function") await refreshLedger();
+        } else {
+          showToast("Keep practising — you'll get it!", "warn");
+        }
+      } catch (e) {
+        showToast("Evaluation failed — check AI connection", "error");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Submit Answer";
+      }
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    // ── Init ─────────────────────────────────────────────────────────────────
     document.addEventListener("DOMContentLoaded", () => {
       localStorage.setItem("student_id", "{{ student_id }}");
       waitForModel();
-      checkAppStatus();
     });
   </script>
   {% block scripts %}{% endblock %}

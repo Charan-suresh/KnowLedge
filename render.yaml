@@ -12,6 +12,6 @@ services:
       - key: OLLAMA_AUTH_TOKEN
         sync: false
       - key: DEMO_MODE
-        value: "false"
+        value: "true"
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn knowledge.main:app --worker-class uvicorn.workers.UvicornWorker --workers 1 --bind 0.0.0.0:$PORT --timeout 120 --log-level info

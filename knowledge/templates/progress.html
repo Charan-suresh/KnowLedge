@@ -1,23 +1,24 @@
 {% extends "base.html" %}
 
 {% block title %}Progress · KnowLedge{% endblock %}
-{% block eyebrow %}Progress Analytics{% endblock %}
+{% block eyebrow %}Learning Analytics{% endblock %}
 {% block page_title %}Learning Progress{% endblock %}
 
 {% block content %}
+
 <section class="hero-card">
   <div>
     <p class="eyebrow">Live Summary</p>
     <h2>Progress fills in as concepts move from debt to understanding.</h2>
-    <p class="hero-copy">This page reads directly from the local SQLite ledger and cleared-session history.</p>
+    <p class="hero-copy">Reading directly from your local SQLite ledger and cleared-session history.</p>
   </div>
 </section>
 
 <div class="stats-grid">
-  <div class="stat-card"><span>Debt Score</span><strong id="pDebt">0%</strong></div>
-  <div class="stat-card"><span>Cleared</span><strong id="pCleared">0</strong></div>
-  <div class="stat-card"><span>Avg Days</span><strong id="pAvgDays">0</strong></div>
-  <div class="stat-card"><span>Streak</span><strong id="pStreak">0</strong></div>
+  <div class="stat-card"><span>Debt Score</span><strong id="pDebt">—</strong></div>
+  <div class="stat-card"><span>Cleared</span><strong id="pCleared">—</strong></div>
+  <div class="stat-card"><span>Avg Days</span><strong id="pAvgDays">—</strong></div>
+  <div class="stat-card"><span>Day Streak</span><strong id="pStreak">—</strong></div>
 </div>
 
 <div class="progress-grid">
@@ -28,65 +29,104 @@
         <h3>Concept confidence</h3>
       </div>
     </div>
-    <div id="conceptBars" class="bars-stack"></div>
+    <div id="conceptBars" class="bars-stack">
+      <p class="empty-msg">Start a Sage session to see data here.</p>
+    </div>
   </section>
 
   <section class="panel-card">
     <div class="panel-head">
       <div>
-        <p class="eyebrow">Trend</p>
-        <h3>Recent cleared sessions</h3>
+        <p class="eyebrow">Activity Trend</p>
+        <h3>Cleared sessions — last 30 days</h3>
       </div>
     </div>
-    <div id="debtTrend" class="trend-wrap"></div>
+    <div id="debtTrend" class="trend-wrap">
+      <p class="empty-msg">Complete sessions to see your trend.</p>
+    </div>
   </section>
 </div>
+
+<!-- Status breakdown row -->
+<section class="panel-card">
+  <div class="panel-head">
+    <div>
+      <p class="eyebrow">Status</p>
+      <h3>All concepts at a glance</h3>
+    </div>
+  </div>
+  <div id="statusPills" style="display:flex;gap:8px;flex-wrap:wrap;padding:4px 0">
+    <p class="empty-msg" style="width:100%;margin:0">No concepts tracked yet.</p>
+  </div>
+</section>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
   async function loadProgress() {
     const sid = getStudentId();
-    const r = await fetch(`/api/progress/summary?student_id=${sid}`);
-    const d = await r.json();
+    let d;
+    try {
+      const r = await fetch(`/api/progress/summary?student_id=${sid}`);
+      if (!r.ok) throw new Error("API error");
+      d = await r.json();
+    } catch (e) { return; }
 
-    document.getElementById("pDebt").textContent = d.debt_score + "%";
-    document.getElementById("pCleared").textContent = d.cleared_month;
-    document.getElementById("pAvgDays").textContent = d.avg_days;
-    document.getElementById("pStreak").textContent = d.streak;
+    document.getElementById("pDebt").textContent    = (d.debt_score ?? 0) + "%";
+    document.getElementById("pCleared").textContent = d.cleared_month ?? 0;
+    document.getElementById("pAvgDays").textContent = (d.avg_days ?? 0) + " d";
+    document.getElementById("pStreak").textContent  = (d.streak ?? 0) + " d";
 
+    // Confidence bars
     const barsEl = document.getElementById("conceptBars");
-    if (d.concepts.length === 0) {
-      barsEl.innerHTML = '<p class="empty-msg">Start a Sage session to see data here.</p>';
-    } else {
+    if (d.concepts && d.concepts.length > 0) {
       barsEl.innerHTML = d.concepts.map(c => {
-        const pct = Math.round(c.confidence * 100);
-        const col = pct >= 80 ? "#4ADE80" : pct >= 50 ? "#FBBF24" : "#F87171";
+        const pct = Math.round((c.confidence || 0) * 100);
+        const col = pct >= 80 ? "#22c55e" : pct >= 50 ? "#f59e0b" : "#ef4444";
         return `
           <div class="h-row">
-            <div class="h-label">${c.name}</div>
-            <div class="h-track">
-              <div class="h-fill" style="width:${pct}%;background:${col}"></div>
-            </div>
+            <div class="h-label">${escapeHtml(c.name)}</div>
+            <div class="h-track"><div class="h-fill" style="width:${pct}%;background:${col}"></div></div>
             <div class="h-pct">${pct}%</div>
           </div>`;
       }).join("");
+    } else {
+      barsEl.innerHTML = '<p class="empty-msg">Start a Sage session to see data here.</p>';
     }
 
+    // Trend chart
     const trendEl = document.getElementById("debtTrend");
-    if (d.debt_history.length > 1) {
-      trendEl.innerHTML = d.debt_history.map(h => `
-        <div class="trend-bar-wrap">
-          <div class="trend-bar" style="height:${h.cleared_count * 20}px;background:#4ADE80"></div>
-          <div class="trend-label">${h.day.slice(5)}</div>
-        </div>`).join("");
+    const hist    = d.debt_history || [];
+    if (hist.length > 1) {
+      const maxVal = Math.max(...hist.map(h => h.cleared_count || 1), 1);
+      trendEl.innerHTML = hist.map(h => {
+        const height = Math.max(8, Math.round((h.cleared_count / maxVal) * 160));
+        const label  = (h.day || "").slice(5).replace("-", "/");
+        return `
+          <div class="trend-bar-wrap">
+            <div class="trend-bar" style="height:${height}px;background:linear-gradient(180deg,#0d9488,#0f766e)"
+                 title="${h.cleared_count} cleared on ${h.day}"></div>
+            <div class="trend-label">${label}</div>
+          </div>`;
+      }).join("");
     } else {
-      trendEl.innerHTML = '<p class="empty-msg">Complete sessions to see trends.</p>';
+      trendEl.innerHTML = '<p class="empty-msg" style="align-self:center">Complete sessions to see trends.</p>';
+    }
+
+    // Status pills
+    const pillsEl = document.getElementById("statusPills");
+    if (d.concepts && d.concepts.length > 0) {
+      pillsEl.innerHTML = d.concepts.map(c => {
+        const sc = { "on-loan": "sp-loan", "clear": "sp-clear", "persists": "sp-pers" }[c.status] || "sp-loan";
+        const sl = { "on-loan": "On Loan", "clear": "Clear", "persists": "Persists" }[c.status] || c.status;
+        return `<span class="status-pill ${sc}" title="${sl}">${escapeHtml(c.name)}</span>`;
+      }).join("");
+    } else {
+      pillsEl.innerHTML = '<p class="empty-msg" style="width:100%;margin:0">No concepts tracked yet.</p>';
     }
   }
 
-  document.addEventListener("DOMContentLoaded", () => {
-    if (window.location.pathname === "/progress") loadProgress();
-  });
+  document.addEventListener("DOMContentLoaded", loadProgress);
 </script>
 {% endblock %}

@@ -5,11 +5,13 @@
 {% block page_title %}Concept Ledger{% endblock %}
 
 {% block content %}
+
+<!-- Hero card -->
 <section class="hero-card">
   <div>
-    <p class="eyebrow">Scout → Ledger</p>
-    <h2>Paste study material and turn borrowed knowledge into tracked debt.</h2>
-    <p class="hero-copy">Scout tags concepts, Sage clears them Socratically, Lens checks handwritten reasoning, and the ledger updates immediately.</p>
+    <p class="eyebrow">Scout → Sage → Clear</p>
+    <h2>Turn borrowed knowledge into permanent understanding.</h2>
+    <p class="hero-copy">Paste your study notes. Scout extracts what you owe. Sage questions you until you truly own it.</p>
   </div>
   <div class="hero-pill-grid">
     <div class="hero-pill"><span id="statLoan">0</span><small>On Loan</small></div>
@@ -19,40 +21,45 @@
   </div>
 </section>
 
+<!-- Scout + Lens panels -->
 <div class="ledger-grid">
   <section class="panel-card">
     <div class="panel-head">
       <div>
-        <p class="eyebrow">Scout</p>
+        <p class="eyebrow">Scout · Concept Extractor</p>
         <h3>Extract concepts from study content</h3>
       </div>
       <button class="btn btn-primary" id="scoutBtn" type="button" onclick="runScout()">Tag concepts</button>
     </div>
-    <textarea id="scoutInput" rows="9" placeholder="Paste two or three paragraphs from notes, a textbook section, or your own explanation..."></textarea>
-    <p id="scoutStatus" class="inline-status" style="display:none"></p>
+    <textarea id="scoutInput" rows="9" placeholder="Paste 2–3 paragraphs from your notes, a textbook section, or your own explanation…"></textarea>
+    <div id="scoutStatus" class="inline-status" style="display:none"></div>
   </section>
 
   <section class="panel-card">
     <div class="panel-head">
       <div>
-        <p class="eyebrow">Lens</p>
-        <h3>Verify handwritten understanding</h3>
+        <p class="eyebrow">Lens · Vision Verifier</p>
+        <h3>Check handwritten reasoning</h3>
       </div>
     </div>
     <label class="upload-box" for="lensFile">
       <input id="lensFile" type="file" accept=".jpg,.jpeg,.png,.webp,.pdf" onchange="runLens(this.files[0])">
-      <strong>Drop a photo or PDF</strong>
-      <span>Lens uses the same local Gemma model for vision checks.</span>
+      <strong>📷 Drop a photo or PDF</strong>
+      <span>Gemma 4 analyses your handwriting for gaps and misconceptions</span>
     </label>
     <div id="lensResult" class="lens-card"></div>
   </section>
 </div>
 
+<!-- Ledger table -->
 <section class="panel-card">
   <div class="panel-head">
     <div>
-      <p class="eyebrow">Ledger</p>
+      <p class="eyebrow">Ledger · Live Knowledge Debt</p>
       <h3>Tracked concepts</h3>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span class="muted-copy" style="font-size:12.5px">Sage = Socratic clearing · Solo = timed recall</span>
     </div>
   </div>
   <div class="table-wrap">
@@ -63,57 +70,65 @@
           <th>Status</th>
           <th>Confidence</th>
           <th>Last Seen</th>
-          <th></th>
+          <th style="text-align:right">Clear</th>
         </tr>
       </thead>
       <tbody id="conceptTableBody">
-        <tr><td colspan="5" class="empty-state">No concepts yet — paste content above to get started.</td></tr>
+        <tr>
+          <td colspan="5" class="empty-state">
+            <div style="padding:16px 0">
+              <div style="font-size:32px;margin-bottom:10px">📒</div>
+              <div style="font-weight:700;margin-bottom:6px">No concepts yet</div>
+              <div style="color:var(--muted);font-size:13px">Paste study notes above and click "Tag concepts" to get started</div>
+            </div>
+          </td>
+        </tr>
       </tbody>
     </table>
   </div>
 </section>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
   async function runScout() {
     const content = document.getElementById("scoutInput").value.trim();
-    if (!content) {
-      showToast("Paste some content first", "warn");
-      return;
-    }
+    if (!content) { showToast("Paste some content first", "warn"); return; }
 
-    const btn = document.getElementById("scoutBtn");
+    const btn      = document.getElementById("scoutBtn");
     const statusEl = document.getElementById("scoutStatus");
-    btn.disabled = true;
-    btn.textContent = "Extracting...";
-    statusEl.textContent = "Gemma 4 is reading your content...";
+    btn.disabled   = true;
+    btn.textContent = "Extracting…";
+    statusEl.textContent = "Gemma 4 is reading your content…";
+    statusEl.style.color = "var(--muted)";
     statusEl.style.display = "block";
 
     try {
       const r = await fetch("/api/scout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(apiBody({
-          content,
-          session_id: getSessionId(),
-        })),
+        body: JSON.stringify(apiBody({ content, session_id: getSessionId() })),
       });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const data = await r.json();
       if (data.concepts && data.concepts.length > 0) {
-        statusEl.textContent = `${data.concepts.length} concepts added to your ledger`;
-        statusEl.style.color = "#4ADE80";
+        statusEl.textContent = `✓ ${data.concepts.length} concept${data.concepts.length > 1 ? "s" : ""} added to your ledger`;
+        statusEl.style.color = "#22c55e";
         document.getElementById("scoutInput").value = "";
         await refreshLedger();
+        showToast(`${data.concepts.length} concepts tracked`);
       } else {
         statusEl.textContent = "No concepts found — try more detailed content";
-        statusEl.style.color = "#FBBF24";
+        statusEl.style.color = "#f59e0b";
       }
     } catch (e) {
-      statusEl.textContent = `Error: ${e.message}`;
-      statusEl.style.color = "#F87171";
-      showToast(`Scout failed: ${e.message}`, "error");
+      const msg = e.message.includes("Failed to fetch")
+        ? "AI model not reachable — check your connection"
+        : `Error: ${e.message}`;
+      statusEl.textContent = msg;
+      statusEl.style.color = "#ef4444";
+      showToast(msg, "error");
     } finally {
       btn.disabled = false;
       btn.textContent = "Tag concepts";
@@ -126,57 +141,59 @@
     const concepts = data.concepts || [];
 
     const onLoan = concepts.filter(c => c.status === "on-loan");
-    const clear = concepts.filter(c => c.status === "clear");
-    const pers = concepts.filter(c => c.status === "persists");
-    const total = concepts.length;
-    const debt = total > 0 ? Math.round((onLoan.length + pers.length) / total * 100) : 0;
+    const clear  = concepts.filter(c => c.status === "clear");
+    const pers   = concepts.filter(c => c.status === "persists");
+    const total  = concepts.length;
+    const debt   = total > 0 ? Math.round((onLoan.length + pers.length) / total * 100) : 0;
 
     document.getElementById("statLoan").textContent = onLoan.length;
     document.getElementById("statClear").textContent = clear.length;
-    document.getElementById("statPers").textContent = pers.length;
-    document.getElementById("statDebt").textContent = debt + "%";
+    document.getElementById("statPers").textContent  = pers.length;
+    document.getElementById("statDebt").textContent  = debt + "%";
 
     const tbody = document.getElementById("conceptTableBody");
     if (concepts.length === 0) {
       tbody.innerHTML = `<tr><td colspan="5" class="empty-state">
-        No concepts yet — paste content above to get started.
+        <div style="padding:16px 0">
+          <div style="font-size:32px;margin-bottom:10px">📒</div>
+          <div style="font-weight:700;margin-bottom:6px">No concepts yet</div>
+          <div style="color:var(--muted);font-size:13px">Paste study notes above and click "Tag concepts" to get started</div>
+        </div>
       </td></tr>`;
       return;
     }
 
     tbody.innerHTML = concepts.map(c => {
-      const conf = Math.round((c.confidence || 0) * 100);
-      const confColor = conf >= 80 ? "#4ADE80" : conf >= 50 ? "#FBBF24" : "#F87171";
-      const statusClass = {
-        "on-loan": "sp-loan",
-        "clear": "sp-clear",
-        "persists": "sp-pers",
-      }[c.status] || "sp-loan";
-      const statusLabel = {
-        "on-loan": "On Loan",
-        "clear": "Clear",
-        "persists": "Persists",
-      }[c.status] || c.status;
-      const lastSeen = c.last_seen ? new Date(c.last_seen).toLocaleDateString() : "just now";
+      const conf       = Math.round((c.confidence || 0) * 100);
+      const confColor  = conf >= 80 ? "#22c55e" : conf >= 50 ? "#f59e0b" : "#ef4444";
+      const statusClass = { "on-loan": "sp-loan", "clear": "sp-clear", "persists": "sp-pers" }[c.status] || "sp-loan";
+      const statusLabel = { "on-loan": "On Loan",  "clear": "Clear",    "persists": "Persists" }[c.status] || c.status;
+      const lastSeen   = c.last_seen ? new Date(c.last_seen).toLocaleDateString() : "just now";
+      const conceptSafe = escapeHtml(c.name).replace(/'/g, "\\'");
+
+      const isClear    = c.status === "clear";
+      const actionBtns = isClear
+        ? `<span class="status-pill sp-clear" style="font-size:11.5px">✓ Cleared</span>`
+        : `<div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap">
+             <button class="btn btn-primary" style="font-size:12.5px;padding:8px 12px" type="button"
+               onclick="openSage('${c.id}','${conceptSafe}')">Sage →</button>
+             <button class="btn btn-ghost" style="font-size:12.5px;padding:8px 12px" type="button"
+               onclick="openSolo('${c.id}','${conceptSafe}')">Solo</button>
+           </div>`;
+
       return `
-        <tr data-id="${c.id}" data-concept="${c.name}">
+        <tr>
           <td>
-            <div class="concept-name">${c.name}</div>
-            <div class="concept-sub">${c.subject || "General"}</div>
+            <div class="concept-name">${escapeHtml(c.name)}</div>
+            <div class="concept-sub">${escapeHtml(c.subject || "General")}</div>
           </td>
           <td><span class="status-pill ${statusClass}">${statusLabel}</span></td>
           <td>
-            <div class="conf-bar-wrap">
-              <div class="conf-bar" style="width:${conf}%;background:${confColor}"></div>
-            </div>
+            <div class="conf-bar-wrap"><div class="conf-bar" style="width:${conf}%;background:${confColor}"></div></div>
             <div class="conf-pct">${conf}%</div>
           </td>
           <td class="tr-time">${lastSeen}</td>
-          <td>
-            <button class="btn btn-ghost" type="button" onclick="openSage('${c.id}','${c.name.replace(/'/g, "\\'")}')">
-              Clear with Sage →
-            </button>
-          </td>
+          <td style="text-align:right">${actionBtns}</td>
         </tr>`;
     }).join("");
   }
@@ -184,11 +201,11 @@
   async function runLens(file) {
     if (!file) return;
     const resultEl = document.getElementById("lensResult");
-    resultEl.innerHTML = `<p class="inline-status">Analyzing with Lens...</p>`;
+    resultEl.innerHTML = `<p class="inline-status" style="color:var(--muted)">🔍 Lens is analysing your work…</p>`;
 
     const formData = new FormData();
-    formData.append("file", file);
-    formData.append("concept", "");
+    formData.append("file",       file);
+    formData.append("concept",    "");
     formData.append("student_id", getStudentId());
     formData.append("ollama_url", getLLMConfig().ollama_url);
 
@@ -196,18 +213,30 @@
       const r = await fetch("/api/lens", { method: "POST", body: formData });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const data = await r.json();
+      const qCol = data.reasoning_quality === "strong" ? "#22c55e"
+                 : data.reasoning_quality === "partial" ? "#f59e0b" : "#ef4444";
+
       resultEl.innerHTML = `
         <div class="lens-result-grid">
-          <div><span class="eyebrow">Reasoning</span><strong>${data.reasoning_quality || "partial"}</strong></div>
-          <div><span class="eyebrow">Handwritten</span><strong>${data.is_handwritten ? "Yes" : "No"}</strong></div>
+          <div style="padding:14px;border-radius:16px;background:rgba(255,255,255,0.7);border:1px solid var(--line)">
+            <span class="eyebrow">Reasoning Quality</span>
+            <strong style="display:block;font-size:18px;color:${qCol};text-transform:capitalize">
+              ${data.reasoning_quality || "partial"}
+            </strong>
+          </div>
+          <div style="padding:14px;border-radius:16px;background:rgba(255,255,255,0.7);border:1px solid var(--line)">
+            <span class="eyebrow">Handwritten</span>
+            <strong style="display:block;font-size:18px">${data.is_handwritten ? "✓ Yes" : "✗ No"}</strong>
+          </div>
         </div>
-        <p><strong>Concepts found:</strong> ${(data.concepts_found || []).join(", ") || "None"}</p>
-        <p><strong>Gaps:</strong> ${(data.gaps || []).join(", ") || "None found"}</p>
-        <p>${data.feedback || ""}</p>
-        <p><strong>Next step:</strong> ${data.recommendation || ""}</p>
-      `;
+        <div style="padding:14px;border-radius:16px;background:rgba(255,255,255,0.6);border:1px solid var(--line);margin-top:12px">
+          <div style="margin-bottom:10px"><strong>Concepts found:</strong> ${(data.concepts_found || []).map(escapeHtml).join(", ") || "None identified"}</div>
+          <div style="margin-bottom:10px"><strong>Gaps:</strong> ${(data.gaps || []).map(escapeHtml).join("; ") || "None detected"}</div>
+          <div style="margin-bottom:10px;color:var(--teal)"><strong>Feedback:</strong> ${escapeHtml(data.feedback || "")}</div>
+          <div style="color:var(--muted)"><strong>Next step:</strong> ${escapeHtml(data.recommendation || "")}</div>
+        </div>`;
     } catch (e) {
-      resultEl.innerHTML = `<p class="inline-status" style="color:#F87171">Lens failed: ${e.message}</p>`;
+      resultEl.innerHTML = `<p class="inline-status" style="color:#ef4444">Lens failed: ${escapeHtml(e.message)}</p>`;
     }
   }
 

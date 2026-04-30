@@ -1,19 +1,88 @@
 {% extends "base.html" %}
 
 {% block title %}Help · KnowLedge{% endblock %}
-{% block eyebrow %}Help{% endblock %}
-{% block page_title %}Local Setup Guide{% endblock %}
+{% block eyebrow %}Help & Architecture{% endblock %}
+{% block page_title %}How KnowLedge Works{% endblock %}
 
 {% block content %}
-<section class="panel-card prose-card">
-  <p class="eyebrow">One model, four roles</p>
-  <h2>KnowLedge now runs entirely on local Ollama.</h2>
-  <p>Scout, Sage, Lens, and Solo all use the same Gemma model. Change only the Ollama URL in the config modal. There are no per-role model settings anymore.</p>
-  <ol class="help-list">
-    <li>Install Ollama.</li>
-    <li>Run <code>ollama pull gemma4:e4b</code>.</li>
-    <li>Run <code>ollama serve</code>.</li>
-    <li>Open the Ollama config modal and click <strong>Detect →</strong>.</li>
-  </ol>
+
+<!-- Mission -->
+<section class="mission-card panel-card">
+  <p class="eyebrow" style="color:rgba(240,232,216,0.45)">The Problem</p>
+  <h3>Every student deserves a Socratic tutor — not just the privileged few.</h3>
+  <p>Research shows that Socratic questioning — being pushed to explain your reasoning rather than just recall facts — produces durable understanding. But access to that kind of rigorous one-on-one tutoring is expensive and scarce. KnowLedge changes that using Gemma 4.</p>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px">
+    <span class="mission-tag">🏆 Kaggle Gemma 4 Good Hackathon</span>
+    <span class="mission-tag">🤗 unsloth/gemma-4-4b-it</span>
+    <span class="mission-tag">📖 100% Open Source</span>
+  </div>
 </section>
+
+<!-- The four agents -->
+<div class="progress-grid">
+  <section class="panel-card">
+    <p class="eyebrow">Scout</p>
+    <h3 style="font-family:'Instrument Serif',serif;font-weight:400">Concept Extractor</h3>
+    <p style="color:var(--muted);line-height:1.7;margin:0">Paste any study content — textbook excerpts, lecture notes, your own summaries. Scout sends it to Gemma 4 and extracts 3–8 key concepts you need to understand, adding each to your personal knowledge debt ledger.</p>
+  </section>
+
+  <section class="panel-card">
+    <p class="eyebrow">Sage</p>
+    <h3 style="font-family:'Instrument Serif',serif;font-weight:400">Socratic Tutor</h3>
+    <p style="color:var(--muted);line-height:1.7;margin:0">Click "Sage →" on any concept. Gemma 4 takes on the role of a Socratic tutor — it never gives you the answer directly. It asks escalating questions until your explanations demonstrate genuine mastery, then marks the concept as cleared.</p>
+  </section>
+
+  <section class="panel-card">
+    <p class="eyebrow">Lens</p>
+    <h3 style="font-family:'Instrument Serif',serif;font-weight:400">Vision Verifier</h3>
+    <p style="color:var(--muted);line-height:1.7;margin:0">Photo of handwritten notes? Drop it in Lens. Gemma 4 vision analyses whether your reasoning is genuine, identifies which tracked concepts are present, and flags gaps or misconceptions — all from a single image.</p>
+  </section>
+
+  <section class="panel-card">
+    <p class="eyebrow">Solo Mode</p>
+    <h3 style="font-family:'Instrument Serif',serif;font-weight:400">Timed Recall Test</h3>
+    <p style="color:var(--muted);line-height:1.7;margin:0">The gold standard of durable learning. Click "Solo" on any concept and explain it from memory without any prompting. Gemma 4 scores your answer strictly but fairly — partial credit isn't enough to mark a concept cleared.</p>
+  </section>
+</div>
+
+<!-- Anti-gaming & integrity -->
+<section class="panel-card prose-card">
+  <p class="eyebrow">Integrity System</p>
+  <h2>Hard to game by design.</h2>
+  <p>Every Sage session generates a signed cryptographic fingerprint tracking typing rhythm, paste events, response timing, and turn-by-turn entropy. If a session looks suspicious — e.g. copy-pasted textbook answers — it gets flagged as "Persists" and redirected to Solo Mode for independent verification.</p>
+  <p>Anti-gaming probes interrupt conversations at random intervals, demanding specificity on the exact phrase a student just typed. This makes paste-and-run attacks ineffective.</p>
+</section>
+
+<!-- Local setup -->
+<section class="panel-card prose-card">
+  <p class="eyebrow">Local Setup</p>
+  <h2>Run everything on your own machine.</h2>
+  <ol class="help-list">
+    <li>Clone: <code>git clone https://github.com/Charan-suresh/KnowLedge.git && cd KnowLedge</code></li>
+    <li>Install: <code>pip install -r requirements.txt</code></li>
+    <li>Pull model: <code>ollama pull gemma4:e4b</code></li>
+    <li>Start Ollama: <code>ollama serve</code></li>
+    <li>Start app: <code>uvicorn knowledge.main:app --reload</code></li>
+    <li>Open: <a href="http://localhost:8000" target="_blank">localhost:8000</a></li>
+  </ol>
+  <p>No internet required after setup. No API keys. No data leaves your machine. The entire inference stack runs on Gemma 4 via Ollama.</p>
+
+  {% if inference_backend == "hf_space" or demo_mode %}
+  <div style="margin-top:16px;padding:16px;border-radius:16px;background:var(--teal-light);border:1px solid rgba(15,118,110,0.15)">
+    <strong style="color:var(--teal)">You're currently using the Render demo.</strong>
+    <p style="margin:6px 0 0;color:var(--muted);font-size:13.5px">Inference is routed through a Hugging Face Space running Gemma 4 (unsloth/gemma-4-4b-it). The first request may take up to 60 seconds on a cold start.</p>
+  </div>
+  {% endif %}
+</section>
+
+<!-- Architecture -->
+<section class="panel-card prose-card">
+  <p class="eyebrow">Architecture</p>
+  <h2>Technical Stack</h2>
+  <p><strong>Backend:</strong> FastAPI (Python) · SQLite (local ledger) · ChromaDB (RAG vector store) · Gunicorn + Uvicorn workers on Render</p>
+  <p><strong>AI:</strong> Gemma 4 (unsloth/gemma-4-4b-it) via either local Ollama or a Hugging Face Space FastAPI backend. The inference router transparently switches between backends based on the <code>INFERENCE_BACKEND</code> env variable.</p>
+  <p><strong>Integrity:</strong> HMAC-SHA256 session fingerprinting · Paste detection · Temporal entropy scoring · Anti-gaming Socratic interrupt probes</p>
+  <p><strong>Frontend:</strong> Jinja2 server-side templates · Vanilla JS (no framework) · CSS custom properties with glassmorphism design system</p>
+</section>
+
 {% endblock %}

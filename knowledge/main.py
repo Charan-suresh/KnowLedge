@@ -40,7 +40,12 @@ from .seed_demo import seed
 from .sync import build_weekly_payload, send_weekly_payload
 
 BASE_DIR = Path(__file__).resolve().parent
-DEFAULT_OLLAMA_URL = config.OLLAMA_BASE_URL
+# Use HF Space URL as the default when running in hf_space backend mode
+DEFAULT_OLLAMA_URL = (
+    config.HF_SPACE_URL
+    if config.INFERENCE_BACKEND == "hf_space" and config.HF_SPACE_URL
+    else config.OLLAMA_BASE_URL
+)
 DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
 
 
@@ -77,6 +82,8 @@ def render_page(request: Request, template_name: str, extra: dict | None = None)
         "demo_mode": DEMO_MODE,
         "default_ollama_url": DEFAULT_OLLAMA_URL,
         "student_id": get_student_id(request),
+        "inference_backend": config.INFERENCE_BACKEND,
+        "hf_space_url": config.HF_SPACE_URL or "",
     }
     if extra:
         context.update(extra)
@@ -470,6 +477,102 @@ def solo(body: dict):
             "what_was_missing": "Try again",
             "next_step": "Rephrase your answer more concisely",
         }
+
+
+@app.get("/api/reports/student")
+def reports_student(student_id: str = "default", db=Depends(get_db)):
+    """Return all data needed for the student impact reports page."""
+    concepts = db.execute(
+        "SELECT * FROM concepts WHERE student_id=?", [student_id]
+    ).fetchall()
+
+    total = len(concepts)
+    on_loan = [c for c in concepts if c["status"] == "on-loan"]
+    clear = [c for c in concepts if c["status"] == "clear"]
+    persists = [c for c in concepts if c["status"] == "persists"]
+    debt_pct = round((len(on_loan) + len(persists)) / total * 100) if total > 0 else 0
+
+    sessions = db.execute(
+        """SELECT * FROM sessions WHERE student_id=?
+           ORDER BY ended_at DESC""",
+        [student_id],
+    ).fetchall()
+    cleared_sessions = [s for s in sessions if s["outcome"] == "cleared"]
+
+    # Estimated Socratic tutoring time: avg 8 minutes per session
+    tutoring_minutes = len(cleared_sessions) * 8
+
+    # Streak
+    streak = 0
+    today = date.today()
+    days_with_clears = db.execute(
+        """SELECT date(ended_at) as day FROM sessions
+           WHERE student_id=? AND outcome='cleared'
+           GROUP BY date(ended_at) ORDER BY day DESC""",
+        [student_id],
+    ).fetchall()
+    for i, row in enumerate(days_with_clears):
+        expected = (today - timedelta(days=i)).isoformat()
+        if row["day"] == expected:
+            streak += 1
+        else:
+            break
+
+    # Weekly history (last 4 weeks)
+    weekly = db.execute(
+        """SELECT strftime('%Y-W%W', ended_at) as week,
+                  COUNT(*) as cleared
+           FROM sessions
+           WHERE student_id=? AND outcome='cleared'
+             AND ended_at >= date('now','-28 days')
+           GROUP BY week ORDER BY week""",
+        [student_id],
+    ).fetchall()
+
+    # Subject breakdown
+    subject_rows = db.execute(
+        """SELECT subject, status, COUNT(*) as cnt
+           FROM concepts WHERE student_id=?
+           GROUP BY subject, status""",
+        [student_id],
+    ).fetchall()
+    subjects: dict = {}
+    for row in subject_rows:
+        s = row["subject"] or "General"
+        if s not in subjects:
+            subjects[s] = {"on_loan": 0, "clear": 0, "persists": 0}
+        subjects[s][row["status"].replace("-", "_")] = row["cnt"]
+
+    # Avg days to clear
+    days_list = []
+    for c in clear:
+        if c["cleared_at"] and c["created_at"]:
+            try:
+                d1 = datetime.fromisoformat(c["created_at"])
+                d2 = datetime.fromisoformat(c["cleared_at"])
+                days_list.append((d2 - d1).days)
+            except Exception:
+                pass
+    avg_days_to_clear = round(sum(days_list) / len(days_list), 1) if days_list else 0
+
+    return {
+        "student_id": student_id,
+        "total_concepts": total,
+        "on_loan": len(on_loan),
+        "cleared": len(clear),
+        "persists": len(persists),
+        "debt_pct": debt_pct,
+        "tutoring_minutes": tutoring_minutes,
+        "streak": streak,
+        "avg_days_to_clear": avg_days_to_clear,
+        "cleared_sessions": len(cleared_sessions),
+        "weekly_history": [dict(r) for r in weekly],
+        "subjects": subjects,
+        "concepts": [
+            {"name": c["name"], "status": c["status"], "confidence": c["confidence"] or 0}
+            for c in sorted(concepts, key=lambda x: x["confidence"] or 0, reverse=True)
+        ],
+    }
 
 
 @app.post("/api/sage/turn")

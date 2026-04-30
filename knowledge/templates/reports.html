@@ -1,13 +1,266 @@
 {% extends "base.html" %}
 
 {% block title %}Reports · KnowLedge{% endblock %}
-{% block eyebrow %}Reports{% endblock %}
-{% block page_title %}Reports{% endblock %}
+{% block eyebrow %}Impact & Analytics{% endblock %}
+{% block page_title %}Learning Report{% endblock %}
 
 {% block content %}
-<section class="panel-card prose-card">
-  <p class="eyebrow">Reporting</p>
-  <h2>Use the Progress page for live student metrics.</h2>
-  <p>This simplified overhaul keeps the core student workflow on the ledger and progress pages. Demo data is available at <a href="/demo">/demo</a>.</p>
+
+<!-- Mission Card -->
+<div class="mission-card panel-card">
+  <p class="eyebrow" style="color:rgba(240,232,216,0.45)">Why This Matters</p>
+  <h3>Access to Socratic tutoring shouldn't depend on wealth.</h3>
+  <p>KnowLedge uses Gemma 4 to give every student the kind of rigorous, one-on-one questioning that has historically been reserved for elite tutors. Every concept you clear here represents a gap that Gemma caught — and closed — before your next exam.</p>
+  <div style="display:flex;gap:10px;flex-wrap:wrap">
+    <span class="mission-tag">🏆 Kaggle Gemma 4 Good Hackathon</span>
+    <span class="mission-tag">🤗 Powered by Gemma 4</span>
+  </div>
+</div>
+
+<!-- Impact Numbers -->
+<div class="panel-card">
+  <p class="eyebrow">Your Impact So Far</p>
+  <h3 style="font-family:'Instrument Serif',serif;font-weight:400;margin:0 0 6px">How Gemma 4 has helped you learn</h3>
+  <div class="impact-grid">
+    <div class="impact-card">
+      <span class="impact-number" id="rTutoringHours">—</span>
+      <div class="impact-label">Minutes of AI Tutoring</div>
+      <div class="impact-sub">Socratic sessions equivalent</div>
+    </div>
+    <div class="impact-card">
+      <span class="impact-number" id="rCleared">—</span>
+      <div class="impact-label">Concepts Cleared</div>
+      <div class="impact-sub">Knowledge you now truly own</div>
+    </div>
+    <div class="impact-card">
+      <span class="impact-number" id="rDebtDrop">—</span>
+      <div class="impact-label">Current Debt Score</div>
+      <div class="impact-sub">Lower is better</div>
+    </div>
+  </div>
+</div>
+
+<!-- Stats row -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <span>Total Tracked</span>
+    <strong id="rTotal">—</strong>
+  </div>
+  <div class="stat-card">
+    <span>On Loan</span>
+    <strong id="rOnLoan">—</strong>
+  </div>
+  <div class="stat-card">
+    <span>Day Streak</span>
+    <strong id="rStreak">—</strong>
+  </div>
+  <div class="stat-card">
+    <span>Avg Days to Clear</span>
+    <strong id="rAvgDays">—</strong>
+  </div>
+</div>
+
+<!-- Charts row -->
+<div class="ledger-grid">
+
+  <!-- Weekly Activity -->
+  <section class="panel-card">
+    <div class="panel-head">
+      <div>
+        <p class="eyebrow">Activity</p>
+        <h3>Concepts cleared per week</h3>
+      </div>
+    </div>
+    <div class="week-chart-wrap" id="weekChart">
+      <p class="empty-msg">Complete sessions to see your weekly trend.</p>
+    </div>
+  </section>
+
+  <!-- Concept Mastery -->
+  <section class="panel-card">
+    <div class="panel-head">
+      <div>
+        <p class="eyebrow">Mastery</p>
+        <h3>Concept confidence ranking</h3>
+      </div>
+    </div>
+    <div class="concept-mastery-grid" id="masteryList">
+      <p class="empty-msg">Start Sage sessions to populate this chart.</p>
+    </div>
+  </section>
+</div>
+
+<!-- Status breakdown -->
+<section class="panel-card">
+  <div class="panel-head">
+    <div>
+      <p class="eyebrow">Status Breakdown</p>
+      <h3>All tracked concepts</h3>
+    </div>
+    <div style="display:flex;gap:14px;font-size:13px;align-items:center;flex-wrap:wrap">
+      <span><span class="status-pill sp-loan">On Loan</span> = borrowed, not yet proved</span>
+      <span><span class="status-pill sp-clear">Clear</span> = Sage verified</span>
+      <span><span class="status-pill sp-pers">Persists</span> = flagged for review</span>
+    </div>
+  </div>
+
+  <!-- Visual debt bar -->
+  <div id="debtBar" style="margin-bottom:20px">
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:6px">
+      <span>Debt composition</span>
+      <span id="debtBarLabel">—</span>
+    </div>
+    <div style="height:12px;border-radius:999px;background:rgba(25,22,16,0.08);overflow:hidden;display:flex">
+      <div id="debtBarLoan"  style="height:100%;background:#f59e0b;transition:width 0.5s"></div>
+      <div id="debtBarPers"  style="height:100%;background:#ef4444;transition:width 0.5s"></div>
+      <div id="debtBarClear" style="height:100%;background:#22c55e;transition:width 0.5s"></div>
+    </div>
+    <div style="display:flex;gap:16px;margin-top:8px;font-size:12px;color:var(--muted)">
+      <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:3px;background:#f59e0b;display:inline-block"></span>On Loan</span>
+      <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:3px;background:#ef4444;display:inline-block"></span>Persists</span>
+      <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:3px;background:#22c55e;display:inline-block"></span>Clear</span>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table class="ledger-table">
+      <thead>
+        <tr>
+          <th>Concept</th>
+          <th>Status</th>
+          <th>Confidence</th>
+        </tr>
+      </thead>
+      <tbody id="reportConceptTable">
+        <tr><td colspan="3" class="empty-state">No concepts yet — go to the Ledger and paste some study notes.</td></tr>
+      </tbody>
+    </table>
+  </div>
 </section>
+
+<!-- How it works -->
+<section class="panel-card prose-card">
+  <p class="eyebrow">How Gemma 4 Helps</p>
+  <h2>Four AI agents, one Gemma model, zero private servers needed.</h2>
+  <p><strong>Scout</strong> reads your study material and extracts the key concepts you need to understand — turning passive reading into an active list of knowledge gaps.</p>
+  <p><strong>Sage</strong> questions you Socratically. It never just gives you the answer. It asks focused, escalating questions until it's confident you genuinely understand — not just memorised — the concept.</p>
+  <p><strong>Lens</strong> analyses photos of your handwritten notes, detecting whether your reasoning holds up and flagging conceptual gaps before they become exam surprises.</p>
+  <p><strong>Solo Mode</strong> gives you a timed, open-ended recall challenge to prove you can explain a concept without any prompting — the gold standard of durable learning.</p>
+  <p style="margin-top:18px;padding:14px 18px;border-radius:16px;background:var(--teal-light);border:1px solid rgba(15,118,110,0.15);color:var(--teal)">
+    <strong>All inference runs on Gemma 4</strong> (unsloth/gemma-4-4b-it) via a Hugging Face Space backend — no paid API keys required. In local mode, it runs entirely on your laptop via Ollama.
+  </p>
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadReports() {
+  const sid = getStudentId();
+  let data;
+  try {
+    const r = await fetch(`/api/reports/student?student_id=${sid}`);
+    if (!r.ok) throw new Error("API error");
+    data = await r.json();
+  } catch (e) {
+    // Fallback to progress summary
+    try {
+      const r2 = await fetch(`/api/progress/summary?student_id=${sid}`);
+      data = await r2.json();
+      data.tutoring_minutes = (data.cleared_month || 0) * 8;
+      data.total_concepts = data.total || 0;
+      data.cleared = data.cleared_month || 0;
+      data.concepts = data.concepts || [];
+      data.weekly_history = data.debt_history || [];
+    } catch (e2) { return; }
+  }
+
+  // Impact numbers
+  document.getElementById("rTutoringHours").textContent = data.tutoring_minutes ?? "—";
+  document.getElementById("rCleared").textContent       = data.cleared ?? data.cleared_month ?? "—";
+  document.getElementById("rDebtDrop").textContent      = (data.debt_pct ?? data.debt_score ?? 0) + "%";
+
+  // Stats
+  document.getElementById("rTotal").textContent   = data.total_concepts ?? data.total ?? "—";
+  document.getElementById("rOnLoan").textContent  = data.on_loan ?? "—";
+  document.getElementById("rStreak").textContent  = (data.streak ?? 0) + " d";
+  document.getElementById("rAvgDays").textContent = (data.avg_days_to_clear ?? data.avg_days ?? 0) + " d";
+
+  // Debt bar
+  const total = data.total_concepts || data.total || 1;
+  const loan  = data.on_loan || 0;
+  const pers  = data.persists || 0;
+  const clear = data.cleared || data.cleared_month || 0;
+  const loanPct  = Math.round(loan  / total * 100);
+  const persPct  = Math.round(pers  / total * 100);
+  const clearPct = Math.round(clear / total * 100);
+  document.getElementById("debtBarLoan").style.width  = loanPct  + "%";
+  document.getElementById("debtBarPers").style.width  = persPct  + "%";
+  document.getElementById("debtBarClear").style.width = clearPct + "%";
+  document.getElementById("debtBarLabel").textContent =
+    `${loanPct}% on loan · ${persPct}% persists · ${clearPct}% clear`;
+
+  // Weekly chart
+  const weekly = data.weekly_history || [];
+  const chartEl = document.getElementById("weekChart");
+  if (weekly.length > 0) {
+    const maxVal = Math.max(...weekly.map(w => w.cleared_count ?? w.cleared ?? 1), 1);
+    chartEl.innerHTML = weekly.map(w => {
+      const val  = w.cleared_count ?? w.cleared ?? 0;
+      const pct  = Math.max(6, Math.round((val / maxVal) * 120));
+      const label = (w.week || w.day || "").slice(-5).replace("-", "/");
+      return `
+        <div class="week-bar-col">
+          <div class="week-bar" style="height:${pct}px" title="${val} cleared"></div>
+          <div class="week-label">${label}</div>
+        </div>`;
+    }).join("");
+  } else {
+    chartEl.innerHTML = '<p class="empty-msg">Complete sessions to see your weekly trend.</p>';
+  }
+
+  // Mastery list
+  const concepts = (data.concepts || []).slice(0, 10);
+  const masteryEl = document.getElementById("masteryList");
+  if (concepts.length > 0) {
+    masteryEl.innerHTML = concepts.map(c => {
+      const pct = Math.round((c.confidence || 0) * 100);
+      const col = pct >= 80 ? "#22c55e" : pct >= 50 ? "#f59e0b" : "#ef4444";
+      const statusClass = { "on-loan": "sp-loan", "clear": "sp-clear", "persists": "sp-pers" }[c.status] || "sp-loan";
+      return `
+        <div class="mastery-row">
+          <div class="mastery-name">${escapeHtml(c.name)}</div>
+          <div class="h-track"><div class="h-fill" style="width:${pct}%;background:${col}"></div></div>
+          <div class="h-pct">${pct}%</div>
+        </div>`;
+    }).join("");
+  } else {
+    masteryEl.innerHTML = '<p class="empty-msg">Start Sage sessions to populate this chart.</p>';
+  }
+
+  // Concept table
+  const tbody = document.getElementById("reportConceptTable");
+  if (concepts.length > 0) {
+    tbody.innerHTML = concepts.map(c => {
+      const pct = Math.round((c.confidence || 0) * 100);
+      const col = pct >= 80 ? "#22c55e" : pct >= 50 ? "#f59e0b" : "#ef4444";
+      const statusClass = { "on-loan": "sp-loan", "clear": "sp-clear", "persists": "sp-pers" }[c.status] || "sp-loan";
+      const statusLabel = { "on-loan": "On Loan", "clear": "Clear", "persists": "Persists" }[c.status] || c.status;
+      return `
+        <tr>
+          <td><div class="concept-name">${escapeHtml(c.name)}</div></td>
+          <td><span class="status-pill ${statusClass}">${statusLabel}</span></td>
+          <td>
+            <div class="conf-bar-wrap"><div class="conf-bar" style="width:${pct}%;background:${col}"></div></div>
+            <div class="conf-pct">${pct}%</div>
+          </td>
+        </tr>`;
+    }).join("");
+  } else {
+    tbody.innerHTML = '<tr><td colspan="3" class="empty-state">No concepts yet — go to the Ledger to get started.</td></tr>';
+  }
+}
+
+document.addEventListener("DOMContentLoaded", loadReports);
+</script>
 {% endblock %}
