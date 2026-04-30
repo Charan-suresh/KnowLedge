@@ -34,7 +34,9 @@ def _normalize_socratic_response(reply: str) -> str:
             break
 
     if question_idx is None:
-        return cleaned
+        if cleaned.endswith("?"):
+            return cleaned
+        return "Can you walk me through one concrete example of this concept?"
 
     explanation = " ".join(sentences[:question_idx]).strip()
     question = sentences[question_idx]

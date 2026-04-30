@@ -29,10 +29,15 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import config
+from . import db
+from . import orchestrator
 from . import ollama_client
+from .agents.inference_router import is_ready as inference_ready
 from .init_db import DB_PATH, init
+from .anti_gaming import score_temporal_fingerprint
 from .prompts import LENS_SYSTEM, SAGE_SYSTEM, SCOUT_SYSTEM, SOLO_SYSTEM
 from .seed_demo import seed
+from .sync import build_weekly_payload, send_weekly_payload
 
 BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_OLLAMA_URL = config.OLLAMA_BASE_URL
@@ -41,6 +46,8 @@ DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
 
 def init_app() -> None:
     init()
+    db.init_db()
+    db.run_migrations()
     if DEMO_MODE:
         seed("demo")
 
@@ -116,7 +123,43 @@ def health():
 
 @app.get("/api/status")
 def status(ollama_url: str | None = Query(None)):
-    return ollama_client.is_ready(ollama_url or DEFAULT_OLLAMA_URL)
+    return inference_ready(ollama_url or DEFAULT_OLLAMA_URL)
+
+
+@app.get("/api/sync/status")
+def sync_status():
+    pending = db.get_pending_sync_payloads()
+    audit = db.get_sync_audit_log()
+    return {
+        "pending_count": len(pending),
+        "audit_count": len(audit),
+        "last_status": audit[0]["status"] if audit else "idle",
+    }
+
+
+@app.get("/api/integrity/report")
+def integrity_report():
+    return db.get_integrity_summary()
+
+
+@app.post("/api/sync/share-weekly")
+def share_weekly():
+    payload = build_weekly_payload()
+    if config.UNIVERSITY_SERVER_URL:
+        try:
+            return send_weekly_payload()
+        except Exception as exc:
+            return {"status": "failed", "error": str(exc), "payload": payload}
+
+    db.queue_sync_payload(
+        course_id=payload["course_id"],
+        week=payload["week"],
+        payload_json=json.dumps(payload),
+        payload_hash=payload["payload_hash"],
+        last_error="university_server_url_not_configured",
+    )
+    db.write_sync_audit(payload["course_id"], payload["week"], len(payload["concepts"]), payload["payload_hash"], "queued", False)
+    return {"status": "queued", "payload": payload}
 
 
 @app.get("/api/concepts")
@@ -427,3 +470,40 @@ def solo(body: dict):
             "what_was_missing": "Try again",
             "next_step": "Rephrase your answer more concisely",
         }
+
+
+@app.post("/api/sage/turn")
+def sage_turn(body: dict):
+    concept = (body.get("concept") or "").strip()
+    student_id = (body.get("student_id") or "default").strip() or "default"
+    session_id = (body.get("session_id") or "").strip() or f"sage-{uuid.uuid4().hex[:10]}"
+    chat_history = body.get("chat_history") or []
+    temporal_fingerprint = body.get("temporal_fingerprint") or {}
+
+    temporal_score = score_temporal_fingerprint(temporal_fingerprint)
+    db_session_id = db.get_or_create_learning_session(student_id, concept)
+    db.update_comprehension_score(
+        db_session_id,
+        concept,
+        {
+            "temporal_score": temporal_score,
+            "verification_signal": 0.0,
+        },
+    )
+
+    result = orchestrator.trigger_clearing(
+        concept,
+        chat_history,
+        session_id=session_id,
+        student_id=student_id,
+        db_session_id=db_session_id,
+    )
+
+    return {
+        "session_id": session_id,
+        "db_session_id": db_session_id,
+        "concept": concept,
+        "temporal_score": temporal_score,
+        "cleared": result.cleared,
+        "response": result.response,
+    }

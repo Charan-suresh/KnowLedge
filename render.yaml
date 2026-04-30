@@ -3,6 +3,10 @@ services:
     name: knowledge
     env: python
     envVars:
+      - key: INFERENCE_BACKEND
+        value: "hf_space"
+      - key: HF_SPACE_URL
+        sync: false
       - key: OLLAMA_BASE_URL
         sync: false
       - key: OLLAMA_AUTH_TOKEN

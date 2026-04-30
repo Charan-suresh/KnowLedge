@@ -923,46 +923,56 @@ def get_session_fingerprint(session_id: str) -> Optional[Dict[str, Any]]:
 
 
 def get_integrity_summary() -> Dict[str, Any]:
-    with get_connection() as conn:
-        has_session_hash = _column_exists(conn, "clearing_history", "session_hash")
-        has_spoof_attempts = _column_exists(conn, "clearing_history", "spoof_attempts")
-        has_integrity_suspect = _column_exists(conn, "debt_log", "integrity_suspect")
-        has_clearing_method = _column_exists(conn, "debt_log", "clearing_method")
+    try:
+        with get_connection() as conn:
+            has_session_hash = _column_exists(conn, "clearing_history", "session_hash")
+            has_spoof_attempts = _column_exists(conn, "clearing_history", "spoof_attempts")
+            has_integrity_suspect = _column_exists(conn, "debt_log", "integrity_suspect")
+            has_clearing_method = _column_exists(conn, "debt_log", "clearing_method")
 
-        signed = conn.execute(
-            "SELECT COUNT(*) AS n FROM clearing_history WHERE session_hash IS NOT NULL AND session_hash != ''"
-            if has_session_hash else
-            "SELECT 0 AS n"
-        ).fetchone()["n"]
-        total_hist = conn.execute("SELECT COUNT(*) AS n FROM clearing_history").fetchone()["n"]
-        spoof_attempts = conn.execute(
-            "SELECT COALESCE(SUM(spoof_attempts), 0) AS n FROM clearing_history"
-            if has_spoof_attempts else
-            "SELECT 0 AS n"
-        ).fetchone()["n"]
-        flagged = conn.execute(
-            "SELECT COUNT(*) AS n FROM debt_log WHERE COALESCE(integrity_suspect, 0) = 1"
-            if has_integrity_suspect else
-            "SELECT 0 AS n"
-        ).fetchone()["n"]
-        lens_verified = conn.execute(
-            "SELECT COUNT(*) AS n FROM debt_log WHERE clearing_method = 'lens_verified'"
-            if has_clearing_method else
-            "SELECT 0 AS n"
-        ).fetchone()["n"]
-        lens_total = conn.execute(
-            "SELECT COUNT(*) AS n FROM debt_log WHERE clearing_method IN ('lens_verified', 'sage_only')"
-            if has_clearing_method else
-            "SELECT 0 AS n"
-        ).fetchone()["n"]
-    return {
-        "sessions_with_signatures": signed,
-        "sessions_total": total_hist,
-        "lens_verified_genuine": lens_verified,
-        "lens_verified_total": lens_total,
-        "spoof_attempts": spoof_attempts,
-        "flagged_concepts": flagged,
-    }
+            signed = conn.execute(
+                "SELECT COUNT(*) AS n FROM clearing_history WHERE session_hash IS NOT NULL AND session_hash != ''"
+                if has_session_hash else
+                "SELECT 0 AS n"
+            ).fetchone()["n"]
+            total_hist = conn.execute("SELECT COUNT(*) AS n FROM clearing_history").fetchone()["n"]
+            spoof_attempts = conn.execute(
+                "SELECT COALESCE(SUM(spoof_attempts), 0) AS n FROM clearing_history"
+                if has_spoof_attempts else
+                "SELECT 0 AS n"
+            ).fetchone()["n"]
+            flagged = conn.execute(
+                "SELECT COUNT(*) AS n FROM debt_log WHERE COALESCE(integrity_suspect, 0) = 1"
+                if has_integrity_suspect else
+                "SELECT 0 AS n"
+            ).fetchone()["n"]
+            lens_verified = conn.execute(
+                "SELECT COUNT(*) AS n FROM debt_log WHERE clearing_method = 'lens_verified'"
+                if has_clearing_method else
+                "SELECT 0 AS n"
+            ).fetchone()["n"]
+            lens_total = conn.execute(
+                "SELECT COUNT(*) AS n FROM debt_log WHERE clearing_method IN ('lens_verified', 'sage_only')"
+                if has_clearing_method else
+                "SELECT 0 AS n"
+            ).fetchone()["n"]
+        return {
+            "sessions_with_signatures": signed,
+            "sessions_total": total_hist,
+            "lens_verified_genuine": lens_verified,
+            "lens_verified_total": lens_total,
+            "spoof_attempts": spoof_attempts,
+            "flagged_concepts": flagged,
+        }
+    except sqlite3.OperationalError:
+        return {
+            "sessions_with_signatures": 0,
+            "sessions_total": 0,
+            "lens_verified_genuine": 0,
+            "lens_verified_total": 0,
+            "spoof_attempts": 0,
+            "flagged_concepts": 0,
+        }
 
 
 def create_solo_session(session_id: str, concept: str, question: str, started_at: str, expires_at: str) -> None:
