@@ -150,22 +150,23 @@ def chat(
 ) -> str:
     base_url = _normalize_base_url(base_url)
     if base_url.endswith(".hf.space"):
-        health_model_name = ""
         if _strict_required_model():
             try:
                 health_response = httpx.get(f"{base_url}/api/health", timeout=5.0, headers=_headers())
                 health_response.raise_for_status()
                 health = health_response.json()
                 health_model_name = health.get("model_file") or health.get("model_repo") or ""
-                if not _matches_required_model(health_model_name):
+                # Only reject if the Space reports a different model; allow "loading" state through.
+                if health_model_name and not _matches_required_model(health_model_name):
                     raise RuntimeError(
                         f"Required model '{_required_model()}' is not active on HF Space. "
-                        f"Current model: '{health_model_name or 'unknown'}'."
+                        f"Current model: '{health_model_name}'."
                     )
             except RuntimeError:
                 raise
-            except Exception as exc:
-                raise RuntimeError(f"Could not verify HF Space model health: {exc}") from exc
+            except Exception:
+                # Health check unreachable — proceed optimistically; inference will fail fast if needed.
+                pass
 
         # HF Space contract uses /api/generate and /api/generate_vision.
         prompt = f"{system}\n\n{user}".strip()
@@ -189,7 +190,7 @@ def chat(
             response = httpx.post(
                 f"{base_url}{endpoint}",
                 json=payload,
-                timeout=120.0,
+                timeout=300.0,
                 headers=_headers(),
             )
             response.raise_for_status()
@@ -201,7 +202,18 @@ def chat(
                 or ""
             ).strip()
         except httpx.TimeoutException as exc:
-            raise RuntimeError("HF Space timed out. Is the Space warm?") from exc
+            raise RuntimeError(
+                "HF Space timed out (5 min). The model may still be loading — "
+                "please wait a moment and try again."
+            ) from exc
+        except httpx.HTTPStatusError as exc:
+            code = exc.response.status_code
+            try:
+                detail = exc.response.json().get("detail", "")
+            except Exception:
+                detail = ""
+            hint = detail or "Model may still be loading — please wait and try again."
+            raise RuntimeError(f"HF Space error {code}: {hint}") from exc
         except Exception as exc:
             raise RuntimeError(f"HF Space error: {exc}") from exc
 

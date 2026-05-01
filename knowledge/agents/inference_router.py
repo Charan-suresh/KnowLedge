@@ -123,12 +123,15 @@ def chat(
             "Please wait and try again."
         )
     except httpx.HTTPStatusError as exc:
-        if exc.response.status_code == 500:
-            raise RuntimeError(
-                "HF Space error 500: Model may still be loading. "
-                "Check https://huggingface.co/spaces/charan-ml/knowledge-inference for status."
-            )
-        raise RuntimeError(f"HF Space HTTP {exc.response.status_code}: {exc}") from exc
+        code = exc.response.status_code
+        try:
+            detail = exc.response.json().get("detail", "")
+        except Exception:
+            detail = ""
+        if code in {500, 503}:
+            hint = detail or "Model may still be loading — please wait and try again."
+            raise RuntimeError(f"HF Space error {code}: {hint}") from exc
+        raise RuntimeError(f"HF Space HTTP {code}: {exc}") from exc
     except Exception as exc:
         raise RuntimeError(f"HF Space error: {exc}") from exc
 
