@@ -23,7 +23,7 @@ import uuid
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, Form, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -269,12 +269,15 @@ def scout(body: dict, db=Depends(get_db)):
         return {"concepts": []}
 
     base_url = body.get("ollama_url", DEFAULT_OLLAMA_URL)
-    raw = ollama_client.chat(
-        system=SCOUT_SYSTEM,
-        user=f"Extract concepts from this study content:\n\n{content}",
-        base_url=base_url,
-        temperature=0.3,
-    )
+    try:
+        raw = ollama_client.chat(
+            system=SCOUT_SYSTEM,
+            user=f"Extract concepts from this study content:\n\n{content}",
+            base_url=base_url,
+            temperature=0.3,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
 
     try:
         concepts = ollama_client.extract_json(raw)
@@ -351,12 +354,15 @@ def sage(body: dict, db=Depends(get_db)):
         history=history_text or "No prior exchanges yet.",
     )
 
-    raw = ollama_client.chat(
-        system=system,
-        user=student_msg,
-        base_url=base_url,
-        temperature=0.8,
-    )
+    try:
+        raw = ollama_client.chat(
+            system=system,
+            user=student_msg,
+            base_url=base_url,
+            temperature=0.8,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
 
     cleared = False
     confidence = None
@@ -424,16 +430,19 @@ async def lens(
     concept_list = [r["name"] for r in concepts_row]
 
     system = LENS_SYSTEM.format(concepts=json.dumps(concept_list))
-    raw = ollama_client.chat(
-        system=system,
-        user=(
-            "Analyze this student's handwritten work. "
-            f"They say it's about: {concept or 'general study notes'}"
-        ),
-        base_url=ollama_url,
-        images=[images_b64[0]],
-        temperature=0.4,
-    )
+    try:
+        raw = ollama_client.chat(
+            system=system,
+            user=(
+                "Analyze this student's handwritten work. "
+                f"They say it's about: {concept or 'general study notes'}"
+            ),
+            base_url=ollama_url,
+            images=[images_b64[0]],
+            temperature=0.4,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
 
     try:
         result = ollama_client.extract_json(raw)
@@ -460,12 +469,15 @@ def solo(body: dict):
         concept=concept,
         context=context or "No additional context provided.",
     )
-    raw = ollama_client.chat(
-        system=system,
-        user=f"Student's answer: {answer}",
-        base_url=base_url,
-        temperature=0.3,
-    )
+    try:
+        raw = ollama_client.chat(
+            system=system,
+            user=f"Student's answer: {answer}",
+            base_url=base_url,
+            temperature=0.3,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
 
     try:
         return ollama_client.extract_json(raw)
