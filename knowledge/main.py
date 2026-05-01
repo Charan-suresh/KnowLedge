@@ -73,7 +73,11 @@ def get_db():
 
 
 def get_student_id(request: Request) -> str:
-    return (request.cookies.get("student_id") or "default").strip() or "default"
+    stored = (request.cookies.get("student_id") or "").strip()
+    if stored:
+        return stored
+    # In demo mode default to the pre-seeded demo account so pages aren't empty
+    return "demo" if DEMO_MODE else "default"
 
 
 def render_page(request: Request, template_name: str, extra: dict | None = None):
@@ -117,7 +121,7 @@ def help_page(request: Request):
 
 @app.get("/demo")
 def demo_route():
-    seed("demo")
+    seed("demo", force=True)
     response = RedirectResponse(url="/ledger")
     response.set_cookie("student_id", "demo", samesite="lax")
     return response
