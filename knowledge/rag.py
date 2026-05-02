@@ -69,8 +69,8 @@ def init_vectorstore() -> Optional["chromadb.Collection"]:
         _disable_vectorstore(str(e))
         return None
 
-# Backward compatibility alias
-def get_collection() -> Optional[chromadb.Collection]:
+# Backward compatibility alias — use string annotation to survive chromadb=None
+def get_collection() -> "Optional[chromadb.Collection]":
     return init_vectorstore()
 
 def extract_text_from_file(file_path: str) -> str:

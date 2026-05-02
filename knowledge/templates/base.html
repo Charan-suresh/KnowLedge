@@ -221,7 +221,10 @@
           <div class="modal-subtitle">Sage · Socratic Tutor</div>
           <h3 id="sageTitle">Clearing Concept</h3>
         </div>
-        <button class="icon-btn" type="button" onclick="closeSageModal()">✕</button>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div id="integrityBadge" style="display:none;font-size:11px;padding:3px 8px;border-radius:20px;background:rgba(251,191,36,0.15);color:#f59e0b;border:1px solid rgba(251,191,36,0.3)">⚠ Typing pattern unusual</div>
+          <button class="icon-btn" type="button" onclick="closeSageModal()">✕</button>
+        </div>
       </div>
       <div class="modal-body">
         <div id="sageConversation" class="conversation"></div>
@@ -270,6 +273,61 @@
     let currentSageHistory     = [];
     let currentSoloConcept     = "";
     let currentSoloConceptId   = "";
+
+    // ── Keyboard telemetry (anti-gaming) ─────────────────────────────────────
+    let _sageQuestionShownAt   = 0;   // timestamp when Sage last asked a question
+    let _sageFirstKeystroke    = 0;   // timestamp of first keydown after question shown
+    let _sageKeyCadence        = [];  // inter-keystroke intervals (ms)
+    let _sageLastKeyAt         = 0;
+    let _sageTotalKeys         = 0;
+    let _sageBackspaceKeys     = 0;
+    let _sagePasteDetected     = false;
+
+    function _resetTelemetry() {
+      _sageQuestionShownAt = performance.now();
+      _sageFirstKeystroke  = 0;
+      _sageKeyCadence      = [];
+      _sageLastKeyAt       = 0;
+      _sageTotalKeys       = 0;
+      _sageBackspaceKeys   = 0;
+      _sagePasteDetected   = false;
+    }
+
+    function _buildTemporalFingerprint(responseText, isComplex) {
+      const len = (responseText || "").trim().length;
+      const ttfk = _sageFirstKeystroke > 0
+        ? (_sageFirstKeystroke - _sageQuestionShownAt)
+        : 0;
+      const editRatio = _sageTotalKeys > 0
+        ? Math.max(0, (_sageTotalKeys - _sageBackspaceKeys) / _sageTotalKeys)
+        : 1.0;
+      return {
+        is_paste_detected:      _sagePasteDetected,
+        time_to_first_keystroke: Math.round(ttfk),
+        typing_cadence:         _sageKeyCadence.slice(-40),
+        edit_ratio:             Math.round(editRatio * 100) / 100,
+        response_length:        len,
+        is_complex_question:    !!isComplex,
+      };
+    }
+
+    function _attachSageTelemetry() {
+      const inp = document.getElementById("sageInput");
+      if (!inp || inp._telemetryAttached) return;
+      inp._telemetryAttached = true;
+      inp.addEventListener("paste", () => { _sagePasteDetected = true; });
+      inp.addEventListener("keydown", (e) => {
+        const now = performance.now();
+        if (_sageFirstKeystroke === 0 && e.key !== "Enter") _sageFirstKeystroke = now;
+        if (_sageLastKeyAt > 0 && e.key !== "Enter") {
+          const gap = now - _sageLastKeyAt;
+          if (gap < 5000) _sageKeyCadence.push(Math.round(gap));
+        }
+        _sageLastKeyAt = now;
+        if (e.key !== "Enter") _sageTotalKeys++;
+        if (e.key === "Backspace" || e.key === "Delete") _sageBackspaceKeys++;
+      });
+    }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
     function getCookie(name) {
@@ -490,6 +548,7 @@
       currentSageConcept   = conceptName;
       currentSageHistory   = [];
       document.getElementById("sageTitle").textContent = conceptName;
+      document.getElementById("integrityBadge").style.display = "none";
       document.getElementById("sageConversation").innerHTML = `
         <div class="bubble bubble-sage">
           <span class="bubble-label">Sage</span>
@@ -497,6 +556,8 @@
         </div>`;
       document.getElementById("sageInput").value = "";
       document.getElementById("sageModal").classList.add("open");
+      _attachSageTelemetry();
+      _resetTelemetry();
       setTimeout(() => document.getElementById("sageInput").focus(), 100);
     }
 
@@ -507,6 +568,10 @@
       const btn     = document.getElementById("sageSendBtn");
       const message = input.value.trim();
       if (!message) return;
+
+      // Capture telemetry for this turn, then reset for the next question
+      const isComplex = currentSageHistory.length >= 2;
+      const temporalFingerprint = _buildTemporalFingerprint(message, isComplex);
 
       const convo = document.getElementById("sageConversation");
       convo.insertAdjacentHTML("beforeend", `<div class="bubble bubble-student"><span class="bubble-label">You</span>${escapeHtml(message)}</div>`);
@@ -524,13 +589,29 @@
         const r = await fetch("/api/sage", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(apiBody({ concept: currentSageConcept, concept_id: currentSageConceptId, history: currentSageHistory, message })),
+          body: JSON.stringify(apiBody({
+            concept: currentSageConcept,
+            concept_id: currentSageConceptId,
+            history: currentSageHistory,
+            message,
+            temporal_fingerprint: temporalFingerprint,
+          })),
         });
         const data = await r.json();
         thinking.remove();
+
+        // Show integrity badge if the server flagged unusual patterns
+        if (data.integrity_flag) {
+          document.getElementById("integrityBadge").style.display = "block";
+        }
+
         convo.insertAdjacentHTML("beforeend", `<div class="bubble bubble-sage"><span class="bubble-label">Sage</span>${escapeHtml(data.reply)}</div>`);
         currentSageHistory.push({ role: "assistant", content: data.reply });
         convo.scrollTop = convo.scrollHeight;
+
+        // Reset telemetry ready for the student's next reply
+        _resetTelemetry();
+
         if (data.cleared) {
           convo.insertAdjacentHTML("beforeend", `<div class="cleared-banner">🎉 Concept cleared! This knowledge is now yours.</div>`);
           showToast("🎉 Concept cleared!", "ok");

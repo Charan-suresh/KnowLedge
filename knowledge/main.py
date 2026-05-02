@@ -54,7 +54,10 @@ def init_app() -> None:
     db.init_db()
     db.run_migrations()
     if DEMO_MODE:
+        # Seed both "demo" and "default" so any visitor gets preloaded data
+        # regardless of whether their browser has a prior cookie/localStorage entry.
         seed("demo")
+        seed("default")
 
 
 init_app()
@@ -99,24 +102,34 @@ def root():
     return RedirectResponse(url="/ledger")
 
 
+def _page_response(request: Request, template_name: str):
+    """Render a page and, in DEMO_MODE, stamp the student_id cookie so the
+    browser always queries the pre-seeded account even on a cold first visit."""
+    response = render_page(request, template_name)
+    if DEMO_MODE and not request.cookies.get("student_id"):
+        sid = get_student_id(request)  # "demo" in DEMO_MODE
+        response.set_cookie("student_id", sid, samesite="lax", max_age=365 * 86400)
+    return response
+
+
 @app.get("/ledger", response_class=HTMLResponse)
 def ledger_page(request: Request):
-    return render_page(request, "ledger.html")
+    return _page_response(request, "ledger.html")
 
 
 @app.get("/progress", response_class=HTMLResponse)
 def progress_page(request: Request):
-    return render_page(request, "progress.html")
+    return _page_response(request, "progress.html")
 
 
 @app.get("/reports", response_class=HTMLResponse)
 def reports_page(request: Request):
-    return render_page(request, "reports.html")
+    return _page_response(request, "reports.html")
 
 
 @app.get("/help", response_class=HTMLResponse)
 def help_page(request: Request):
-    return render_page(request, "help.html")
+    return _page_response(request, "help.html")
 
 
 @app.get("/demo")
@@ -348,6 +361,11 @@ def sage(body: dict, db=Depends(get_db)):
     student_id = body.get("student_id", "default")
     base_url = body.get("ollama_url", DEFAULT_OLLAMA_URL)
 
+    # ── Anti-gaming: score temporal fingerprint from the browser ─────────────
+    temporal_fingerprint = body.get("temporal_fingerprint") or {}
+    temporal_score = score_temporal_fingerprint(temporal_fingerprint)
+    integrity_flag = temporal_score < 0.4  # suspicious if score too low
+
     history_text = "\n".join(
         f"{'Sage' if m['role'] == 'assistant' else 'Student'}: {m['content']}"
         for m in history[-6:]
@@ -373,9 +391,20 @@ def sage(body: dict, db=Depends(get_db)):
     try:
         result = ollama_client.extract_json(raw)
         if isinstance(result, dict) and result.get("verdict") == "CLEARED":
-            cleared = True
-            confidence = result.get("confidence", 0.85)
-            reply = "✓ You've demonstrated real understanding. This concept is now yours."
+            # Only clear if the anti-gaming score doesn't flag serious cheating.
+            # Score < 0.25 means paste + near-zero cadence variance; block the clear.
+            if temporal_score >= 0.25:
+                cleared = True
+                confidence = result.get("confidence", 0.85)
+                # Weight confidence down proportionally for borderline typing scores
+                if temporal_score < 0.60:
+                    confidence = round(confidence * temporal_score, 3)
+                reply = "✓ You've demonstrated real understanding. This concept is now yours."
+            else:
+                reply = (
+                    "Your answer looks like it may have been pasted rather than typed. "
+                    "Please close this and try again in your own words, typed from scratch."
+                )
         else:
             reply = raw
     except ValueError:
@@ -401,7 +430,13 @@ def sage(body: dict, db=Depends(get_db)):
         )
         db.commit()
 
-    return {"reply": reply, "cleared": cleared, "confidence": confidence}
+    return {
+        "reply": reply,
+        "cleared": cleared,
+        "confidence": confidence,
+        "temporal_score": round(temporal_score, 3),
+        "integrity_flag": integrity_flag,
+    }
 
 
 @app.post("/api/lens")

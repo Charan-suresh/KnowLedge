@@ -208,10 +208,7 @@ async function loadReports() {
     chartEl.innerHTML = weekly.map(w => {
       const val  = w.cleared_count ?? w.cleared ?? 0;
       const pct  = Math.max(6, Math.round((val / maxVal) * 120));
-      const raw   = w.week || w.day || "";
-      const label = raw.includes("-W")
-        ? raw.replace(/^\d{4}-/, "")           // "2026-W17" → "W17"
-        : raw.slice(5).replace("-", "/");      // "2026-04-15" → "04/15"
+      const label = (w.week || w.day || "").slice(-5).replace("-", "/");
       return `
         <div class="week-bar-col">
           <div class="week-bar" style="height:${pct}px" title="${val} cleared"></div>
