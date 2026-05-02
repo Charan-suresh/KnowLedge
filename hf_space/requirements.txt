@@ -1,12 +1,12 @@
 fastapi==0.112.2
 uvicorn==0.30.6
-gradio==4.44.1
+# gradio is injected automatically by HF Spaces as gradio[oauth]==4.44.1 — do not pin here
 
-# Use transformers instead of llama-cpp for better HF Spaces compatibility
-transformers==4.45.2
-torch==2.1.0
-accelerate==0.25.0
+# Transformers: stable release with Gemma 4 support
+transformers>=4.52.0
+torch==2.3.1
+accelerate>=0.30.0
 
 # Utilities
 Pillow
-huggingface_hub==0.25.2
+huggingface_hub>=0.26.0
