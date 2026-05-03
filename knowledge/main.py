@@ -382,6 +382,7 @@ def sage(body: dict, db=Depends(get_db)):
             user=student_msg,
             base_url=base_url,
             temperature=0.8,
+            max_tokens=150,  # Sage responses are capped at 50 words; 150 tokens is ample
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc))

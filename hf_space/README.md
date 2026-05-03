@@ -1,5 +1,5 @@
 ---
-title: KnowLedge Inference API
+title: KnowLedge Inference
 emoji: 📖
 colorFrom: yellow
 colorTo: green
@@ -9,6 +9,8 @@ sdk_version: 4.44.1
 app_file: app.py
 pinned: true
 license: apache-2.0
+hardware: zero-gpu
+short_description: Gemma 4 inference for KnowLedge learning tracker
 tags:
   - gemma
   - gemma-4

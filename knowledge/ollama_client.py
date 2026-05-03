@@ -147,6 +147,7 @@ def chat(
     base_url: str = OLLAMA_BASE,
     images: list[str] | None = None,
     temperature: float = 0.7,
+    max_tokens: int = 512,
 ) -> str:
     base_url = _normalize_base_url(base_url)
     if base_url.endswith(".hf.space"):
@@ -175,14 +176,14 @@ def chat(
                 "prompt": prompt,
                 "image_base64": images[0],
                 "model": _hf_model_hint(),
-                "max_tokens": 512,
+                "max_tokens": max_tokens,
             }
             endpoint = "/api/generate_vision"
         else:
             payload = {
                 "prompt": prompt,
                 "model": _hf_model_hint(),
-                "max_tokens": 512,
+                "max_tokens": max_tokens,
             }
             endpoint = "/api/generate"
 
