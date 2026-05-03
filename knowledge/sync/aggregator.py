@@ -1,6 +1,7 @@
 import hashlib
 import json
-from datetime import UTC, datetime
+from datetime import datetime, timezone
+UTC = timezone.utc  # datetime.UTC was added in Python 3.11; use timezone.utc for 3.10 compat
 from typing import Dict, Any, List
 
 from .. import config
