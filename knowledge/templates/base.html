@@ -223,6 +223,7 @@
         </div>
         <div style="display:flex;align-items:center;gap:8px">
           <div id="integrityBadge" style="display:none;font-size:11px;padding:3px 8px;border-radius:20px;background:rgba(251,191,36,0.15);color:#f59e0b;border:1px solid rgba(251,191,36,0.3)">⚠ Typing pattern unusual</div>
+          <div id="sageTimerBadge" style="display:none;font-size:13px;padding:3px 8px;border-radius:20px;background:var(--card);border:1px solid var(--line);font-family:monospace;font-weight:600">⏱ 01:10</div>
           <button class="icon-btn" type="button" onclick="closeSageModal()">✕</button>
         </div>
       </div>
@@ -543,6 +544,47 @@
     }
 
     // ── Sage Modal ───────────────────────────────────────────────────────────
+    let sageTimerInterval = null;
+    let sageTimeLeft = 70;
+
+    function startSageTimer() {
+      clearInterval(sageTimerInterval);
+      sageTimeLeft = 70;
+      const timerBadge = document.getElementById("sageTimerBadge");
+      const input = document.getElementById("sageInput");
+      const btn = document.getElementById("sageSendBtn");
+      
+      timerBadge.style.display = "block";
+      timerBadge.style.color = "inherit";
+      
+      const updateUI = () => {
+        const m = Math.floor(sageTimeLeft / 60).toString().padStart(2, "0");
+        const s = (sageTimeLeft % 60).toString().padStart(2, "0");
+        timerBadge.textContent = `⏱ ${m}:${s}`;
+        if (sageTimeLeft <= 10) timerBadge.style.color = "#ef4444";
+      };
+      
+      updateUI();
+      sageTimerInterval = setInterval(() => {
+        sageTimeLeft--;
+        updateUI();
+        if (sageTimeLeft <= 0) {
+          clearInterval(sageTimerInterval);
+          input.disabled = true;
+          btn.disabled = true;
+          const convo = document.getElementById("sageConversation");
+          convo.insertAdjacentHTML("beforeend", `<div class="bubble bubble-sage"><span class="bubble-label">Sage</span>Time's up! You took longer than 70 seconds to answer. Please close this window and try again when you are ready.</div>`);
+          convo.scrollTop = convo.scrollHeight;
+        }
+      }, 1000);
+    }
+
+    function stopSageTimer() {
+      clearInterval(sageTimerInterval);
+      const timerBadge = document.getElementById("sageTimerBadge");
+      if (timerBadge) timerBadge.style.display = "none";
+    }
+
     function openSage(conceptId, conceptName) {
       currentSageConceptId = conceptId;
       currentSageConcept   = conceptName;
@@ -558,10 +600,16 @@
       document.getElementById("sageModal").classList.add("open");
       _attachSageTelemetry();
       _resetTelemetry();
+      document.getElementById("sageInput").disabled = false;
+      document.getElementById("sageSendBtn").disabled = false;
+      startSageTimer();
       setTimeout(() => document.getElementById("sageInput").focus(), 100);
     }
 
-    function closeSageModal() { document.getElementById("sageModal").classList.remove("open"); }
+    function closeSageModal() { 
+      stopSageTimer();
+      document.getElementById("sageModal").classList.remove("open"); 
+    }
 
     async function sendSageMessage() {
       const input   = document.getElementById("sageInput");
@@ -577,7 +625,9 @@
       convo.insertAdjacentHTML("beforeend", `<div class="bubble bubble-student"><span class="bubble-label">You</span>${escapeHtml(message)}</div>`);
       currentSageHistory.push({ role: "user", content: message });
       input.value = "";
+      input.disabled = true;
       btn.disabled = true;
+      stopSageTimer();
 
       const thinking = document.createElement("div");
       thinking.className = "bubble bubble-sage bubble-thinking";
@@ -617,6 +667,8 @@
           showToast("🎉 Concept cleared!", "ok");
           if (typeof refreshLedger === "function") await refreshLedger();
           setTimeout(closeSageModal, 1200);
+        } else {
+          startSageTimer();
         }
       } catch (e) {
         thinking.remove();
