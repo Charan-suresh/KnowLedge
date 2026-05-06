@@ -443,6 +443,7 @@ def sage(body: dict, db=Depends(get_db)):
 @app.post("/api/lens")
 async def lens(
     file: UploadFile = File(...),
+    document_type: str = Form("auto"),
     concept: str = Form(""),
     student_id: str = Form("default"),
     ollama_url: str = Form(DEFAULT_OLLAMA_URL),
@@ -451,17 +452,31 @@ async def lens(
     contents = await file.read()
     images_b64 = []
 
-    if file.content_type == "application/pdf":
+    is_pdf = False
+    if document_type == "pdf":
+        is_pdf = True
+    elif document_type == "auto" and file.content_type == "application/pdf":
+        is_pdf = True
+    elif document_type == "auto" and file.filename and file.filename.lower().endswith(".pdf"):
+        is_pdf = True
+
+    if is_pdf:
         try:
             import fitz
         except ModuleNotFoundError as exc:
-            raise RuntimeError("PDF support requires pymupdf/fitz to be installed.") from exc
-        doc = fitz.open(stream=contents, filetype="pdf")
-        for i in range(min(len(doc), 3)):
-            pix = doc[i].get_pixmap(dpi=150)
-            images_b64.append(base64.b64encode(pix.tobytes("png")).decode())
+            raise HTTPException(status_code=500, detail="PDF support requires pymupdf/fitz to be installed.") from exc
+        try:
+            doc = fitz.open(stream=contents, filetype="pdf")
+            for i in range(min(len(doc), 3)):
+                pix = doc[i].get_pixmap(dpi=150)
+                images_b64.append(base64.b64encode(pix.tobytes("png")).decode())
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Could not read PDF: {exc}")
     else:
         images_b64.append(base64.b64encode(contents).decode())
+
+    if not images_b64 or not images_b64[0]:
+        raise HTTPException(status_code=400, detail="No readable pages or images found in the uploaded file.")
 
     concepts_row = db.execute(
         "SELECT name FROM concepts WHERE student_id=? AND status='on-loan' LIMIT 10",

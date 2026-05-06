@@ -42,11 +42,18 @@
         <h3>Check handwritten reasoning</h3>
       </div>
     </div>
-    <label class="upload-box" for="lensFile">
-      <input id="lensFile" type="file" accept=".jpg,.jpeg,.png,.webp,.pdf" onchange="runLens(this.files[0])">
-      <strong>📷 Drop a photo or PDF</strong>
-      <span>Gemma 4 analyses your handwriting for gaps and misconceptions</span>
-    </label>
+    <div style="margin-bottom:12px">
+      <select id="lensFileType" style="width:100%;margin-bottom:12px;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-family:inherit">
+        <option value="auto">Auto-detect file type</option>
+        <option value="image">Image (JPG, PNG, WebP)</option>
+        <option value="pdf">PDF Document</option>
+      </select>
+      <label class="upload-box" for="lensFile">
+        <input id="lensFile" type="file" accept=".jpg,.jpeg,.png,.webp,.pdf" onchange="runLens(this.files[0])">
+        <strong>📷 Drop a photo or PDF</strong>
+        <span>Gemma 4 analyses your handwriting for gaps and misconceptions</span>
+      </label>
+    </div>
     <div id="lensResult" class="lens-card"></div>
   </section>
 </div>
@@ -203,8 +210,10 @@
     const resultEl = document.getElementById("lensResult");
     resultEl.innerHTML = `<p class="inline-status" style="color:var(--muted)">🔍 Lens is analysing your work…</p>`;
 
+    const fileType = document.getElementById("lensFileType").value;
     const formData = new FormData();
     formData.append("file",       file);
+    formData.append("document_type", fileType);
     formData.append("concept",    "");
     formData.append("student_id", getStudentId());
     formData.append("ollama_url", getLLMConfig().ollama_url);
