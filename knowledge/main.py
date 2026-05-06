@@ -376,6 +376,10 @@ def sage(body: dict, db=Depends(get_db)):
         history=history_text or "No prior exchanges yet.",
     )
 
+    student_msg_count = sum(1 for m in history if m.get("role") == "user") + 1
+    if student_msg_count >= 5:
+        system += "\n- The student has answered 5 times. If their latest answer shows even partial understanding, you MUST respond with the CLEARED JSON. Do NOT ask any more questions."
+
     try:
         raw = ollama_client.chat(
             system=system,
