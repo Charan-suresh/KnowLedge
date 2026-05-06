@@ -98,7 +98,7 @@
     // Trend chart
     const trendEl = document.getElementById("debtTrend");
     const hist    = d.debt_history || [];
-    if (hist.length > 1) {
+    if (hist.length > 0) {
       const maxVal = Math.max(...hist.map(h => h.cleared_count || 1), 1);
       trendEl.innerHTML = hist.map(h => {
         const height = Math.max(8, Math.round((h.cleared_count / maxVal) * 160));

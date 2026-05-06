@@ -75,14 +75,4 @@
   {% endif %}
 </section>
 
-<!-- Architecture -->
-<section class="panel-card prose-card">
-  <p class="eyebrow">Architecture</p>
-  <h2>Technical Stack</h2>
-  <p><strong>Backend:</strong> FastAPI (Python) · SQLite (local ledger) · ChromaDB (RAG vector store) · Gunicorn + Uvicorn workers on Render</p>
-  <p><strong>AI:</strong> Gemma 4 (unsloth/gemma-4-4b-it) via either local Ollama or a Hugging Face Space FastAPI backend. The inference router transparently switches between backends based on the <code>INFERENCE_BACKEND</code> env variable.</p>
-  <p><strong>Integrity:</strong> HMAC-SHA256 session fingerprinting · Paste detection · Temporal entropy scoring · Anti-gaming Socratic interrupt probes</p>
-  <p><strong>Frontend:</strong> Jinja2 server-side templates · Vanilla JS (no framework) · CSS custom properties with glassmorphism design system</p>
-</section>
-
 {% endblock %}

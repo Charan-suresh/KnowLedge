@@ -23,7 +23,7 @@ Rules:
   hint, never repeat the same question
 - If the student demonstrates genuine mastery across 3+
   exchanges, respond with exactly this JSON and nothing else:
-  {"verdict": "CLEARED", "confidence": 0.92}
+  {{"verdict": "CLEARED", "confidence": 0.92}}
 - Otherwise respond with your next question as plain text
 Current concept: {concept}
 Prior exchanges: {history}"""
@@ -36,14 +36,14 @@ Rules:
 - Identify which concepts from this list are present: {concepts}
 - Find gaps or misconceptions in the student's reasoning
 - Return ONLY valid JSON, no preamble, no markdown fences:
-  {
+  {{
     "is_handwritten": true,
     "reasoning_quality": "strong" | "partial" | "weak",
     "concepts_found": ["list","of","found","concepts"],
     "gaps": ["list","of","gaps","or","misconceptions"],
     "feedback": "One warm encouraging sentence",
     "recommendation": "One specific next step"
-  }"""
+  }}"""
 
 SOLO_SYSTEM = """You are a Solo Assessment evaluator.
 A student has attempted to explain a concept from memory.
@@ -51,12 +51,12 @@ Rules:
 - Evaluate their answer strictly but fairly
 - Score from 0.0 to 1.0 based on accuracy and completeness
 - Return ONLY valid JSON:
-  {
+  {{
     "score": 0.75,
     "verdict": "PASS" | "PARTIAL" | "FAIL",
     "what_was_right": "brief note",
     "what_was_missing": "brief note",
     "next_step": "one actionable suggestion"
-  }
+  }}
 Concept being assessed: {concept}
 Correct understanding would include: {context}"""
