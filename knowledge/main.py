@@ -24,7 +24,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -57,7 +57,8 @@ def init_app() -> None:
         # Seed both "demo" and "default" so any visitor gets preloaded data
         # regardless of whether their browser has a prior cookie/localStorage entry.
         seed("demo")
-        seed("default")
+    # Always seed "default" on first run so new visitors get a populated ledger
+    seed("default")
 
 
 init_app()
@@ -100,6 +101,11 @@ def render_page(request: Request, template_name: str, extra: dict | None = None)
 @app.get("/", response_class=HTMLResponse)
 def root():
     return RedirectResponse(url="/ledger")
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return Response(status_code=204)
 
 
 def _page_response(request: Request, template_name: str):

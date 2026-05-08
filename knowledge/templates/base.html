@@ -387,6 +387,13 @@
 
       // ── HF Space / demo mode: brief brand splash then proceed ──────────────
       if (IS_HF_BACKEND || IS_DEMO) {
+        if (sessionStorage.getItem("splash_shown")) {
+          if (screenEl) screenEl.style.display = "none";
+          checkAppStatus();
+          return;
+        }
+        sessionStorage.setItem("splash_shown", "true");
+
         const hfMessages = [
           "Warming up Gemma 4 on HF Space…",
           "Initialising AI tutoring modules…",
