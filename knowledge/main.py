@@ -652,6 +652,47 @@ def reports_student(student_id: str = "default", db=Depends(get_db)):
     }
 
 
+@app.get("/api/reports/instructor")
+def reports_instructor(db=Depends(get_db)):
+    """Return aggregated data for the instructor dashboard."""
+    concepts = db.execute("SELECT * FROM concepts").fetchall()
+    total_students_row = db.execute("SELECT COUNT(DISTINCT student_id) as cnt FROM concepts").fetchone()
+    total_students = total_students_row["cnt"] if total_students_row else 0
+
+    total = len(concepts)
+    on_loan = [c for c in concepts if c["status"] == "on-loan"]
+    clear = [c for c in concepts if c["status"] == "clear"]
+    persists = [c for c in concepts if c["status"] == "persists"]
+    debt_pct = round((len(on_loan) + len(persists)) / total * 100) if total > 0 else 0
+
+    sessions = db.execute("SELECT * FROM sessions ORDER BY ended_at DESC").fetchall()
+    cleared_sessions = [s for s in sessions if s["outcome"] == "cleared"]
+    tutoring_minutes = len(cleared_sessions) * 8
+
+    # Struggling concepts: group by name, count persists and on-loan
+    struggling_rows = db.execute(
+        """SELECT name, COUNT(*) as cnt, SUM(CASE WHEN status='persists' THEN 1 ELSE 0 END) as persists_cnt
+           FROM concepts
+           WHERE status IN ('persists', 'on-loan')
+           GROUP BY lower(name)
+           ORDER BY persists_cnt DESC, cnt DESC
+           LIMIT 10"""
+    ).fetchall()
+
+    return {
+        "total_students": total_students,
+        "class_debt_pct": debt_pct,
+        "total_concepts": total,
+        "cleared_concepts": len(clear),
+        "tutoring_minutes": tutoring_minutes,
+        "struggling": [{"name": r["name"], "cnt": r["cnt"], "persists_cnt": r["persists_cnt"]} for r in struggling_rows],
+        "recent_clears": [
+            {"student_id": s["student_id"], "concept": s["concept_name"], "ended_at": s["ended_at"]}
+            for s in cleared_sessions[:10]
+        ]
+    }
+
+
 @app.post("/api/sage/turn")
 def sage_turn(body: dict):
     concept = (body.get("concept") or "").strip()

@@ -6,6 +6,12 @@
 
 {% block content %}
 
+<div class="view-toggle" style="display:flex;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:4px;margin-bottom:24px;width:fit-content">
+  <button id="btnStudentView" class="btn btn-ghost" style="background:var(--bg);color:var(--text);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,0.1)" onclick="switchView('student')">Student View</button>
+  <button id="btnInstructorView" class="btn btn-ghost" style="color:var(--muted)" onclick="switchView('instructor')">Instructor View</button>
+</div>
+
+<div id="studentViewContainer">
 <!-- Mission Card -->
 <div class="mission-card panel-card">
   <p class="eyebrow" style="color:rgba(240,232,216,0.45)">Why This Matters</p>
@@ -150,6 +156,80 @@
     <strong>All inference runs on Gemma 4</strong> (unsloth/gemma-4-4b-it) via a Hugging Face Space backend — no paid API keys required. In local mode, it runs entirely on your laptop via Ollama.
   </p>
 </section>
+</div>
+
+<div id="instructorViewContainer" style="display:none">
+  <!-- Instructor Dashboard -->
+  <div class="panel-card">
+    <p class="eyebrow">Class Impact</p>
+    <h3 style="font-family:'Instrument Serif',serif;font-weight:400;margin:0 0 6px">Aggregated learning metrics</h3>
+    <div class="impact-grid">
+      <div class="impact-card">
+        <span class="impact-number" id="iStudents">—</span>
+        <div class="impact-label">Active Students</div>
+        <div class="impact-sub">Total learners tracked</div>
+      </div>
+      <div class="impact-card">
+        <span class="impact-number" id="iDebtScore">—</span>
+        <div class="impact-label">Avg Debt Score</div>
+        <div class="impact-sub">Class-wide average</div>
+      </div>
+      <div class="impact-card">
+        <span class="impact-number" id="iCleared">—</span>
+        <div class="impact-label">Total Concepts Cleared</div>
+        <div class="impact-sub">Across all students</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ledger-grid">
+    <section class="panel-card">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">Intervention Required</p>
+          <h3>Concepts struggling the most</h3>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="ledger-table">
+          <thead>
+            <tr>
+              <th>Concept</th>
+              <th style="text-align:right">Total Tracked</th>
+              <th style="text-align:right">Persists Count</th>
+            </tr>
+          </thead>
+          <tbody id="iStrugglingTable">
+            <tr><td colspan="3" class="empty-state">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel-card">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">Live Feed</p>
+          <h3>Recent student clears</h3>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="ledger-table">
+          <thead>
+            <tr>
+              <th>Student ID</th>
+              <th>Concept</th>
+              <th style="text-align:right">When</th>
+            </tr>
+          </thead>
+          <tbody id="iRecentClearsTable">
+            <tr><td colspan="3" class="empty-state">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</div>
 
 {% endblock %}
 
@@ -261,6 +341,81 @@ async function loadReports() {
     }).join("");
   } else {
     tbody.innerHTML = '<tr><td colspan="3" class="empty-state">No concepts yet — go to the Ledger to get started.</td></tr>';
+  }
+}
+
+function switchView(view) {
+  const sBtn = document.getElementById('btnStudentView');
+  const iBtn = document.getElementById('btnInstructorView');
+  const sView = document.getElementById('studentViewContainer');
+  const iView = document.getElementById('instructorViewContainer');
+
+  if (view === 'student') {
+    sBtn.style.background = 'var(--bg)';
+    sBtn.style.color = 'var(--text)';
+    sBtn.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+    
+    iBtn.style.background = 'transparent';
+    iBtn.style.color = 'var(--muted)';
+    iBtn.style.boxShadow = 'none';
+
+    sView.style.display = 'block';
+    iView.style.display = 'none';
+  } else {
+    iBtn.style.background = 'var(--bg)';
+    iBtn.style.color = 'var(--text)';
+    iBtn.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+    
+    sBtn.style.background = 'transparent';
+    sBtn.style.color = 'var(--muted)';
+    sBtn.style.boxShadow = 'none';
+
+    iView.style.display = 'block';
+    sView.style.display = 'none';
+    loadInstructorReports();
+  }
+}
+
+async function loadInstructorReports() {
+  try {
+    const r = await fetch('/api/reports/instructor');
+    if (!r.ok) throw new Error("API error");
+    const data = await r.json();
+
+    document.getElementById("iStudents").textContent = data.total_students ?? "—";
+    document.getElementById("iDebtScore").textContent = (data.class_debt_pct ?? 0) + "%";
+    document.getElementById("iCleared").textContent = data.cleared_concepts ?? "—";
+
+    const stTable = document.getElementById("iStrugglingTable");
+    if (data.struggling && data.struggling.length > 0) {
+      stTable.innerHTML = data.struggling.map(s => `
+        <tr>
+          <td><div class="concept-name">${escapeHtml(s.name)}</div></td>
+          <td style="text-align:right">${s.cnt}</td>
+          <td style="text-align:right;color:#ef4444;font-weight:600">${s.persists_cnt}</td>
+        </tr>
+      `).join('');
+    } else {
+      stTable.innerHTML = '<tr><td colspan="3" class="empty-state">No struggling concepts found.</td></tr>';
+    }
+
+    const rcTable = document.getElementById("iRecentClearsTable");
+    if (data.recent_clears && data.recent_clears.length > 0) {
+      rcTable.innerHTML = data.recent_clears.map(c => {
+        const time = new Date(c.ended_at).toLocaleString();
+        return `
+          <tr>
+            <td><div class="concept-sub" style="font-family:monospace">${escapeHtml(c.student_id)}</div></td>
+            <td><div class="concept-name">${escapeHtml(c.concept)}</div></td>
+            <td class="tr-time" style="text-align:right">${time}</td>
+          </tr>
+        `;
+      }).join('');
+    } else {
+      rcTable.innerHTML = '<tr><td colspan="3" class="empty-state">No recent clears.</td></tr>';
+    }
+  } catch (e) {
+    console.error(e);
   }
 }
 
