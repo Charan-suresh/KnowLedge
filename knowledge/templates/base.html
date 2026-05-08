@@ -37,6 +37,7 @@
       <div class="loading-dots"><span></span><span></span><span></span></div>
 
       <!-- Only shown for local Ollama users when model not found -->
+      {% if inference_backend != "hf_space" and not demo_mode %}
       <div id="ollamaHelp" style="display:none" class="ollama-help">
         <p><strong>Ollama not detected.</strong> To run locally:</p>
         <ol>
@@ -48,6 +49,7 @@
         <p class="hint">~3.2 GB download · Runs on any laptop with 6 GB RAM</p>
         <button class="btn btn-ghost" style="margin-top:12px" onclick="skipLoading()">Continue without AI →</button>
       </div>
+      {% endif %}
     </div>
   </div>
 
@@ -222,7 +224,8 @@
           <h3 id="sageTitle">Clearing Concept</h3>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
-          <div id="integrityBadge" style="display:none;font-size:11px;padding:3px 8px;border-radius:20px;background:rgba(251,191,36,0.15);color:#f59e0b;border:1px solid rgba(251,191,36,0.3)">⚠ Typing pattern unusual</div>
+          <div id="telemetryBadge" style="font-size:11px;padding:3px 8px;border-radius:20px;background:rgba(74,222,128,0.1);color:#4ade80;border:1px solid rgba(74,222,128,0.2)" title="Anti-cheat engine is analyzing keystrokes in real-time">🟢 Telemetry Active</div>
+          <div id="integrityBadge" style="display:none;font-size:11px;padding:3px 8px;border-radius:20px;background:rgba(251,191,36,0.15);color:#f59e0b;border:1px solid rgba(251,191,36,0.3)">⚠ Unusual typing cadence detected</div>
           <div id="sageTimerBadge" style="display:none;font-size:13px;padding:3px 8px;border-radius:20px;background:var(--card);border:1px solid var(--line);font-family:monospace;font-weight:600">⏱ 01:10</div>
           <button class="icon-btn" type="button" onclick="closeSageModal()">✕</button>
         </div>

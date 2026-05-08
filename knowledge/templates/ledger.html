@@ -11,7 +11,7 @@
   <div>
     <p class="eyebrow">Scout → Sage → Clear</p>
     <h2>Turn borrowed knowledge into permanent understanding.</h2>
-    <p class="hero-copy">Paste your study notes. Scout extracts what you owe. Sage questions you until you truly own it.</p>
+    <p class="hero-copy">KnowLedge is an offline-first learning debt tracker that gives every student a personal Socratic tutor. It stops conceptual gaps from compounding by verifying true understanding before the next exam.</p>
   </div>
   <div class="hero-pill-grid">
     <div class="hero-pill"><span id="statLoan">—</span><small>On Loan</small></div>
@@ -53,6 +53,9 @@
         <strong>📷 Drop a photo or PDF</strong>
         <span>Gemma 4 analyses your handwriting for gaps and misconceptions</span>
       </label>
+      <div style="margin-top:12px;text-align:center">
+        <button class="btn btn-ghost" style="font-size:13px;width:100%" type="button" onclick="testSampleLens()">Try with sample physics derivation →</button>
+      </div>
     </div>
     <div id="lensResult" class="lens-card"></div>
   </section>
@@ -246,6 +249,18 @@
         </div>`;
     } catch (e) {
       resultEl.innerHTML = `<p class="inline-status" style="color:#ef4444">Lens failed: ${escapeHtml(e.message)}</p>`;
+    }
+  }
+
+  async function testSampleLens() {
+    try {
+      const response = await fetch('/static/sample_physics.png');
+      const blob = await response.blob();
+      const file = new File([blob], 'sample_physics.png', { type: 'image/png' });
+      document.getElementById('lensFileType').value = 'image';
+      runLens(file);
+    } catch (e) {
+      if (typeof showToast === "function") showToast("Could not load sample image", "error");
     }
   }
 
