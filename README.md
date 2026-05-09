@@ -2,7 +2,6 @@
 
 <img src="https://img.shields.io/badge/Gemma%204-E4B-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Gemma 4">
 <img src="https://img.shields.io/badge/Hackathon-Gemma%204%20for%20Good-FF6F00?style=for-the-badge&logo=kaggle&logoColor=white" alt="Hackathon">
-<img src="https://img.shields.io/badge/Demo-Live-brightgreen?style=for-the-badge" alt="Live Demo">
 <img src="https://img.shields.io/badge/Offline--First-SQLite%20%2B%20ChromaDB-blue?style=for-the-badge" alt="Offline First">
 <img src="https://img.shields.io/badge/License-Apache%202.0-lightgrey?style=for-the-badge" alt="License">
 
@@ -10,8 +9,6 @@
 ### *Turn borrowed understanding into permanent mastery.*
 
 **Every student deserves a personal Socratic tutor — not just those who can afford one.**
-
-[🚀 Live Demo](https://knowledge-sv13.onrender.com/ledger) · [📈 Progress](https://knowledge-sv13.onrender.com/progress) · [🎓 Reports](https://knowledge-sv13.onrender.com/reports) · [💡 Help](https://knowledge-sv13.onrender.com/help)
 
 </div>
 
@@ -147,69 +144,15 @@ KnowLedge/
 │   ├── sync/               # Privacy-preserving instructor sync
 │   ├── rag.py              # ChromaDB retrieval for curriculum context
 │   └── templates/          # Jinja2 HTML templates
-├── knowledge-mobile/       # Expo + React Native companion app
 ├── cloud-run/              # Google Cloud Run deployment scripts
 ├── hf_space/               # Hugging Face Space config
 ├── scripts/                # Deployment verification tools
-└── tests/                  # Backend test suite
+└── requirements.txt        # Python dependencies
 ```
 
 ---
 
-## Quick Start
-
-### Option 1 — Live Demo (Instant, no setup)
-
-**[→ Open the live demo](https://knowledge-sv13.onrender.com/ledger)**
-
-Powered by `unsloth/gemma-4-4b-it` on Hugging Face Space. First request warms up in ~60 s.
-
-### Option 2 — Run Locally with Ollama (Full offline mode)
-
-```bash
-# 1. Clone
-git clone https://github.com/Charan-suresh/KnowLedge.git
-cd KnowLedge
-
-# 2. Install Ollama and pull Gemma 4
-curl -fsSL https://ollama.com/install.sh | sh
-ollama pull gemma4:e4b   # ~3.2 GB
-
-# 3. Set up Python environment
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-
-# 4. Configure
-cp .env.example .env
-# Set INFERENCE_BACKEND=ollama in .env
-
-# 5. Run
-uvicorn knowledge.main:app --host 127.0.0.1 --port 8000
-```
-
-Open `http://127.0.0.1:8000/ledger` — all inference runs on your machine, no API keys needed.
-
-**Requirements**: Python 3.11+, ~6 GB RAM, ~3.5 GB disk for model weights.
-
-### Option 3 — Deploy Your Own Cloud Instance
-
-```bash
-# Deploy Gemma 4 to Google Cloud Run GPU
-gcloud auth login
-./cloud-run/deploy-ollama.sh
-
-# Then deploy the web app to Render
-# Fork this repo → render.com → new web service → auto-detects render.yaml
-# Add env vars: OLLAMA_BASE_URL, OLLAMA_AUTH_TOKEN
-```
-
-Full instructions in `cloud-run/README.md`.
-
----
-
-## Trying the Core Workflows
-
-Once the app is running, here is the recommended judge walkthrough:
+## Core Workflows
 
 **1. Scout — Extract concepts from study material**
 - Go to `/ledger`
@@ -270,52 +213,6 @@ Individual student names, conversation transcripts, and session content are neve
 
 ---
 
-## Mobile Companion
-
-A React Native + Expo companion app lives in `knowledge-mobile/`:
-
-```bash
-cd knowledge-mobile
-npm install
-npx expo start
-```
-
-Supports three inference modes: `on_device_full`, `on_device_scout`, `server_only`. The native Gemma bridge for Android and iOS is scaffolded for future implementation.
-
----
-
-## Running Tests
-
-```bash
-# Backend test suite
-python -m pytest
-
-# Deployment smoke test
-python scripts/verify_deployment.py https://knowledge-sv13.onrender.com
-
-# Local Lens test (requires a test image)
-python test_lens_local.py
-```
-
----
-
-## Configuration Reference
-
-All settings live in `knowledge/config.py` and can be overridden via environment variables:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `INFERENCE_BACKEND` | `hf_space` | `ollama` or `hf_space` |
-| `OLLAMA_HOST` | `http://localhost:11434` | Local Ollama endpoint |
-| `HF_SPACE_URL` | — | Your HF Space URL |
-| `SCOUT_MODEL` | `gemma4:e4b` | Model tag for concept extraction |
-| `SAGE_MODEL` | `gemma4:e4b` | Model tag for Socratic sessions |
-| `LENS_MODEL` | `gemma4:e4b` | Model tag for vision analysis |
-| `DEMO_MODE` | `true` | Seeds realistic demo data on startup |
-| `SYNC_ON_WIFI_ONLY` | `true` | Restricts instructor sync to Wi-Fi |
-
----
-
 ## What Makes This Different
 
 | Typical AI Study Tool | KnowLedge |
@@ -329,15 +226,11 @@ All settings live in `knowledge/config.py` and can be overridden via environment
 
 ---
 
-## Hackathon Submission Notes
+## About This Project
 
 This project was built for the [Gemma 4 for Good Hackathon](https://www.kaggle.com/competitions/gemma-4-good-hackathon/) hosted by Kaggle and Google DeepMind.
 
 **Gemma 4 is core to the product**, not bolted on. Remove Gemma 4 and the product does not exist. The four agent roles (Scout, Sage, Lens, Solo) are each specifically designed around Gemma 4's capabilities: structured JSON output, multi-turn Socratic reasoning, multimodal vision analysis, and evaluation grading.
-
-The live demo is fully functional. All four workflows can be tested at [https://knowledge-sv13.onrender.com/ledger](https://knowledge-sv13.onrender.com/ledger) without any setup.
-
-The local setup can be reproduced in under 15 minutes on any machine with Ollama installed.
 
 ---
 
@@ -350,7 +243,5 @@ Apache License 2.0 — see [LICENSE](LICENSE) for details.
 <div align="center">
 
 *Built with Gemma 4 · For students everywhere who learn alone.*
-
-[🚀 Try the Demo](https://knowledge-sv13.onrender.com/ledger) · [⭐ Star on GitHub](https://github.com/Charan-suresh/KnowLedge)
 
 </div>
