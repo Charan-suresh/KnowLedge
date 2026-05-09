@@ -1,9 +1,3 @@
-<div align="center">
-
-<img src="https://img.shields.io/badge/Gemma%204-E4B-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Gemma 4">
-<img src="https://img.shields.io/badge/Hackathon-Gemma%204%20for%20Good-FF6F00?style=for-the-badge&logo=kaggle&logoColor=white" alt="Hackathon">
-<img src="https://img.shields.io/badge/Offline--First-SQLite%20%2B%20ChromaDB-blue?style=for-the-badge" alt="Offline First">
-<img src="https://img.shields.io/badge/License-Apache%202.0-lightgrey?style=for-the-badge" alt="License">
 
 # KnowLedge
 ### *Turn borrowed understanding into permanent mastery.*
