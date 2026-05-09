@@ -218,15 +218,7 @@ Individual student names, conversation transcripts, and session content are neve
 | No integrity verification | Anti-spoof, cadence analysis, session fingerprinting |
 | One AI role (Q&A) | Four distinct AI roles with tightly scoped prompts |
 
----
 
-## About This Project
-
-This project was built for the [Gemma 4 for Good Hackathon](https://www.kaggle.com/competitions/gemma-4-good-hackathon/) hosted by Kaggle and Google DeepMind.
-
-**Gemma 4 is core to the product**, not bolted on. Remove Gemma 4 and the product does not exist. The four agent roles (Scout, Sage, Lens, Solo) are each specifically designed around Gemma 4's capabilities: structured JSON output, multi-turn Socratic reasoning, multimodal vision analysis, and evaluation grading.
-
----
 
 ## License
 
