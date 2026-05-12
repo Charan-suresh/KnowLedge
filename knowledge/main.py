@@ -451,7 +451,7 @@ def sage(body: dict, db=Depends(get_db)):
 
 
 @app.post("/api/lens")
-async def lens(
+def lens(
     file: UploadFile = File(...),
     document_type: str = Form("auto"),
     concept: str = Form(""),
@@ -459,7 +459,7 @@ async def lens(
     ollama_url: str = Form(DEFAULT_OLLAMA_URL),
     db=Depends(get_db),
 ):
-    contents = await file.read()
+    contents = file.file.read()
     images_b64 = []
 
     is_pdf = False
