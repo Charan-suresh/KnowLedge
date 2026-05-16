@@ -2,9 +2,102 @@
 
 {% block title %}Reports · KnowLedge{% endblock %}
 {% block eyebrow %}Impact & Analytics{% endblock %}
-{% block page_title %}Learning Report{% endblock %}
+{% block page_title %}
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+  Learning Report
+  <div style="display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:4px 10px;border-radius:12px;background:var(--bg-deep);border:1px solid var(--line);font-weight:500;color:var(--ink);">
+    <span>👤</span> <span id="headerStudentBadge">{{ student_id }}</span>
+  </div>
+  {% if inference_backend == "hf_space" or demo_mode %}
+  <div style="display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:4px 10px;border-radius:12px;background:var(--teal-light);border:1px solid rgba(15,118,110,0.2);color:var(--teal);font-weight:500;">
+    <span>🤗</span> Gemma 4
+  </div>
+  {% else %}
+  <div style="display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:4px 10px;border-radius:12px;background:var(--bg-deep);border:1px solid var(--line);font-weight:500;">
+    <span>⚙</span> Ollama
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
 
-{% block content %}
+{% block head %}
+<style>
+  .topbar-actions { display: none !important; }
+  
+  .impact-grid {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)) !important;
+    gap: 16px !important;
+    margin-bottom: 24px !important;
+    margin-top: 0 !important;
+  }
+  .impact-card {
+    background: var(--bg-deep) !important;
+    border-radius: 12px !important;
+    padding: 16px 20px !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  .impact-number {
+    font-size: 28px !important;
+    font-weight: 500 !important;
+    background: none !important;
+    -webkit-text-fill-color: var(--ink) !important;
+    color: var(--ink) !important;
+  }
+  .impact-label {
+    font-size: 12px !important;
+    color: var(--muted) !important;
+    margin-top: 4px !important;
+    text-transform: none !important;
+    letter-spacing: normal !important;
+  }
+  .impact-sub { display: none !important; }
+
+  h3 {
+    font-size: 15px !important;
+    font-weight: 500 !important;
+    margin-bottom: 12px !important;
+    padding-bottom: 8px !important;
+    border-bottom: 1px solid var(--line) !important;
+    font-family: "Manrope", sans-serif !important;
+  }
+
+  .ledger-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+  .ledger-table th {
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.04em !important;
+    color: var(--muted) !important;
+    padding: 8px 12px !important;
+    border-bottom: 1px solid var(--line) !important;
+  }
+  .ledger-table td {
+    font-size: 13px !important;
+    padding: 10px 12px !important;
+    border-bottom: 1px solid var(--line) !important;
+  }
+  .ledger-table tbody tr:nth-child(even) {
+    background: var(--bg-deep) !important;
+  }
+  .ledger-table tbody tr:hover { background: rgba(0,0,0,0.02) !important; }
+
+  .agent-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .agent-card {
+    background: var(--bg-deep);
+    border-radius: 10px;
+    padding: 16px;
+  }
+</style>
+{% endblock %}
 
 <div class="view-toggle" style="display:flex;gap:16px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:4px;margin-bottom:24px;width:fit-content">
   <button id="btnStudentView" class="btn btn-ghost" style="background:var(--bg);color:var(--text);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,0.1)" onclick="switchView('student')">Student View</button>
@@ -144,10 +237,24 @@
 <section class="panel-card prose-card">
   <p class="eyebrow">How Gemma 4 Helps</p>
   <h2>Four AI agents, one Gemma model, zero private servers needed.</h2>
-  <p><strong>Scout</strong> reads your study material and extracts the key concepts you need to understand — turning passive reading into an active list of knowledge gaps.</p>
-  <p><strong>Sage</strong> questions you Socratically. It never just gives you the answer. It asks focused, escalating questions until it's confident you genuinely understand — not just memorised — the concept.</p>
-  <p><strong>Lens</strong> analyses photos of your handwritten notes, detecting whether your reasoning holds up and flagging conceptual gaps before they become exam surprises.</p>
-  <p><strong>Solo Mode</strong> gives you a timed, open-ended recall challenge to prove you can explain a concept without any prompting — the gold standard of durable learning.</p>
+  <div class="agent-grid">
+    <div class="agent-card" style="border-left: 3px solid #1D9E75;">
+      <strong style="display:block;margin-bottom:6px;">Scout</strong>
+      <p style="margin:0;color:var(--muted);font-size:13px;">reads your study material and extracts the key concepts you need to understand — turning passive reading into an active list of knowledge gaps.</p>
+    </div>
+    <div class="agent-card" style="border-left: 3px solid #7F77DD;">
+      <strong style="display:block;margin-bottom:6px;">Sage</strong>
+      <p style="margin:0;color:var(--muted);font-size:13px;">questions you Socratically. It never just gives you the answer. It asks focused, escalating questions until it's confident you genuinely understand — not just memorised — the concept.</p>
+    </div>
+    <div class="agent-card" style="border-left: 3px solid #BA7517;">
+      <strong style="display:block;margin-bottom:6px;">Lens</strong>
+      <p style="margin:0;color:var(--muted);font-size:13px;">analyses photos of your handwritten notes, detecting whether your reasoning holds up and flagging conceptual gaps before they become exam surprises.</p>
+    </div>
+    <div class="agent-card" style="border-left: 3px solid #378ADD;">
+      <strong style="display:block;margin-bottom:6px;">Solo Mode</strong>
+      <p style="margin:0;color:var(--muted);font-size:13px;">gives you a timed, open-ended recall challenge to prove you can explain a concept without any prompting — the gold standard of durable learning.</p>
+    </div>
+  </div>
 </section>
 </div>
 
