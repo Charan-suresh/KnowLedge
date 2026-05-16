@@ -16,8 +16,8 @@ tags:
   - gemma-4
   - education
   - inference-api
-  - knowledge
-  - hackathon
+  - unsloth
+  - gemma--
 ---
 
 # KnowLedge Inference API
@@ -25,7 +25,7 @@ tags:
 Gemma 4 E2B + E4B inference backend for the
 [KnowLedge](https://github.com/Charan-suresh/KnowLedge) learning ledger.
 
-Part of the Kaggle Gemma 4 Good Hackathon submission.
+A lightweight, fast inference endpoint providing the Socratic reasoning for KnowLedge.
 
 ## Endpoints
 
