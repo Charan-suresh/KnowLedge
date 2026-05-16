@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block title %}Reports · KnowLedge{% endblock %}
-{% block eyebrow %}Impact & Analytics{% endblock %}
+{% block eyebrow %}Teacher View · Privacy-Preserving Analytics{% endblock %}
 {% block page_title %}
 <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
   Learning Report
@@ -102,11 +102,11 @@
 {% block content %}
 
 <div class="view-toggle" style="display:flex;gap:16px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:4px;margin-bottom:24px;width:fit-content">
-  <button id="btnStudentView" class="btn btn-ghost" style="background:var(--bg);color:var(--text);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,0.1)" onclick="switchView('student')">Student View</button>
-  <button id="btnInstructorView" class="btn btn-ghost" style="color:var(--muted)" onclick="switchView('instructor')">Instructor View</button>
+  <button id="btnInstructorView" class="btn btn-ghost" style="background:var(--bg);color:var(--text);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,0.1)" onclick="switchView('instructor')">Teacher View</button>
+  <button id="btnStudentView" class="btn btn-ghost" style="color:var(--muted)" onclick="switchView('student')">Student View</button>
 </div>
 
-<div id="studentViewContainer">
+<div id="studentViewContainer" style="display:none">
 <!-- Mission Card -->
 <div class="mission-card panel-card">
   <p class="eyebrow" style="color:rgba(240,232,216,0.45)">Why This Matters</p>
@@ -260,7 +260,27 @@
 </section>
 </div>
 
-<div id="instructorViewContainer" style="display:none">
+<div id="instructorViewContainer">
+
+  <!-- Privacy guarantee -->
+  <div style="background:var(--teal-light);border:1px solid rgba(15,118,110,0.22);border-radius:14px;padding:16px 20px;margin-bottom:20px;display:flex;align-items:flex-start;gap:14px">
+    <span style="font-size:22px;flex-shrink:0;line-height:1">🔒</span>
+    <div>
+      <div style="font-weight:700;margin-bottom:4px;color:var(--teal)">Privacy Guarantee — No student data is exposed here</div>
+      <p style="margin:0;font-size:13px;color:var(--ink-soft);line-height:1.6">
+        This view shows <strong>aggregated concept data only</strong>. No student names. No conversation transcripts. No individual session details. Students' Socratic dialogues with Gemma 4 never leave their device — only concept names and mastery status are synced. All inference runs on-device via Gemma 4.
+      </p>
+    </div>
+  </div>
+
+  <!-- Why this matters -->
+  <div style="background:var(--panel-strong);border:1px solid var(--line);border-radius:14px;padding:18px 22px;margin-bottom:20px">
+    <p class="eyebrow" style="margin-bottom:6px">Why This Exists</p>
+    <p style="margin:0;font-size:14px;line-height:1.7;color:var(--ink-soft)">
+      A teacher with 35 students has <strong>~3 minutes of individual time per student per week</strong>. When a student says they understand quadratic equations, there is no way to verify that — until the exam. KnowLedge surfaces which concepts are uncleared across the class, privately, so teachers know exactly where to intervene before it's too late.
+    </p>
+  </div>
+
   <!-- Instructor Dashboard -->
   <div class="panel-card">
     <p class="eyebrow">Class Impact</p>
@@ -288,8 +308,8 @@
     <section class="panel-card">
       <div class="panel-head">
         <div>
-          <p class="eyebrow">Intervention Required</p>
-          <h3>Concepts struggling the most</h3>
+          <p class="eyebrow">Intervention Required · Act before the exam</p>
+          <h3>Concepts uncleared across the class</h3>
         </div>
       </div>
       <div class="table-wrap">
@@ -456,22 +476,19 @@ function switchView(view) {
     sBtn.style.background = 'var(--bg)';
     sBtn.style.color = 'var(--text)';
     sBtn.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
-    
     iBtn.style.background = 'transparent';
     iBtn.style.color = 'var(--muted)';
     iBtn.style.boxShadow = 'none';
-
     sView.style.display = 'block';
     iView.style.display = 'none';
+    loadReports();
   } else {
     iBtn.style.background = 'var(--bg)';
     iBtn.style.color = 'var(--text)';
     iBtn.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
-    
     sBtn.style.background = 'transparent';
     sBtn.style.color = 'var(--muted)';
     sBtn.style.boxShadow = 'none';
-
     iView.style.display = 'block';
     sView.style.display = 'none';
     loadInstructorReports();
@@ -521,6 +538,9 @@ async function loadInstructorReports() {
   }
 }
 
-document.addEventListener("DOMContentLoaded", loadReports);
+document.addEventListener("DOMContentLoaded", () => {
+  // Default to Teacher View — that's the impact story judges need to see
+  switchView('instructor');
+});
 </script>
 {% endblock %}

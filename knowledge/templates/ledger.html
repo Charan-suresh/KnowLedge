@@ -1,45 +1,46 @@
 {% extends "base.html" %}
 
 {% block title %}Ledger · KnowLedge{% endblock %}
-{% block eyebrow %}Student Workspace{% endblock %}
+{% block eyebrow %}Classroom Intelligence{% endblock %}
 {% block page_title %}Concept Ledger{% endblock %}
 
 {% block content %}
 
+{% block head %}
+<style>
+  .hero-pill-debt {
+    background: var(--teal-light) !important;
+    border: 1px solid rgba(15,118,110,0.22) !important;
+  }
+  .hero-pill-debt span { font-size: 2rem !important; font-weight: 700 !important; color: var(--teal) !important; }
+  .hero-pill-debt small { color: var(--teal) !important; font-weight: 600 !important; }
+  .overdue-flag { font-size:11px; color:#ef4444; margin-top:2px; font-weight:600; }
+</style>
+{% endblock %}
+
 <!-- Hero card -->
 <section class="hero-card">
   <div>
-    <p class="eyebrow">Scout → Sage → Clear</p>
-    <h2>Turn borrowed knowledge into permanent understanding.</h2>
-    <p class="hero-copy">KnowLedge is an offline-first learning debt tracker that gives every student a personal Socratic tutor. It stops conceptual gaps from compounding by verifying true understanding before the next exam.</p>
+    <p class="eyebrow">Scout → Sage → Clear → Teacher View</p>
+    <h2>The gap between confident recall and real understanding is where exam failure starts.</h2>
+    <p class="hero-copy">KnowLedge gives teachers a class-wide early-warning system — and every student a private Socratic tutor powered by Gemma 4. Runs fully offline. No student data in the cloud. Built for classrooms that can't wait until exam results to find out who's struggling.</p>
+    <a class="btn btn-ghost" href="/demo" style="display:inline-block;margin-top:16px;font-size:13px;padding:8px 18px">↺ Load demo classroom</a>
   </div>
   <div class="hero-pill-grid">
+    <div class="hero-pill hero-pill-debt"><span id="statDebt">—</span><small>Debt Score</small></div>
     <div class="hero-pill"><span id="statLoan">—</span><small>On Loan</small></div>
-    <div class="hero-pill"><span id="statClear">—</span><small>Clear</small></div>
+    <div class="hero-pill"><span id="statClear">—</span><small>Cleared</small></div>
     <div class="hero-pill"><span id="statPers">—</span><small>Persists</small></div>
-    <div class="hero-pill"><span id="statDebt">—</span><small>Debt Score</small></div>
   </div>
 </section>
 
-<!-- Scout + Lens panels -->
+<!-- Lens + Scout panels (Lens first — multimodal showcase) -->
 <div class="ledger-grid">
   <section class="panel-card">
     <div class="panel-head">
       <div>
-        <p class="eyebrow">Scout · Concept Extractor</p>
-        <h3>Extract concepts from study content</h3>
-      </div>
-      <button class="btn btn-primary" id="scoutBtn" type="button" onclick="runScout()">Tag concepts</button>
-    </div>
-    <textarea id="scoutInput" rows="9" placeholder="Paste 2–3 paragraphs from your notes, a textbook section, or your own explanation…"></textarea>
-    <div id="scoutStatus" class="inline-status" style="display:none"></div>
-  </section>
-
-  <section class="panel-card">
-    <div class="panel-head">
-      <div>
-        <p class="eyebrow">Lens · Vision Verifier</p>
-        <h3>Check handwritten reasoning</h3>
+        <p class="eyebrow">Lens · Multimodal Vision — Gemma 4</p>
+        <h3>Analyse handwritten notes for gaps</h3>
       </div>
     </div>
     <div style="margin-bottom:12px">
@@ -48,14 +49,25 @@
         <option value="image">Image (JPG, PNG, WebP)</option>
         <option value="pdf">PDF Document</option>
       </select>
-      <label class="upload-box" for="lensFile">
+      <label class="upload-box" for="lensFile" style="min-height:110px;border:2px dashed var(--teal-mid);background:var(--teal-light)">
         <input id="lensFile" type="file" accept=".jpg,.jpeg,.png,.webp,.pdf" onchange="runLens(this.files[0])">
-        <strong>📷 Drop a photo or PDF</strong>
-        <span>Gemma 4 analyses your handwriting for gaps and misconceptions</span>
+        <strong style="color:var(--teal);font-size:15px">📷 Drop a photo or PDF of handwritten notes</strong>
+        <span style="color:var(--teal);opacity:0.8">Gemma 4 vision reads reasoning quality, spots gaps and misconceptions</span>
       </label>
-
     </div>
     <div id="lensResult" class="lens-card"></div>
+  </section>
+
+  <section class="panel-card">
+    <div class="panel-head">
+      <div>
+        <p class="eyebrow">Scout · Concept Extractor — Gemma 4</p>
+        <h3>Extract concepts from study content</h3>
+      </div>
+      <button class="btn btn-primary" id="scoutBtn" type="button" onclick="runScout()">Tag concepts</button>
+    </div>
+    <textarea id="scoutInput" rows="9" placeholder="Paste 2–3 paragraphs from your notes, a textbook section, or your own explanation…"></textarea>
+    <div id="scoutStatus" class="inline-status" style="display:none"></div>
   </section>
 </div>
 
@@ -171,12 +183,17 @@
       return;
     }
 
+    const nowMs = Date.now();
     tbody.innerHTML = concepts.map(c => {
       const conf       = Math.round((c.confidence || 0) * 100);
       const confColor  = conf >= 80 ? "#22c55e" : conf >= 50 ? "#f59e0b" : "#ef4444";
       const statusClass = { "on-loan": "sp-loan", "clear": "sp-clear", "persists": "sp-pers" }[c.status] || "sp-loan";
-      const statusLabel = { "on-loan": "On Loan",  "clear": "Clear",    "persists": "Persists" }[c.status] || c.status;
-      const lastSeen   = c.last_seen ? new Date(c.last_seen).toLocaleDateString() : "just now";
+      const statusLabel = { "on-loan": "On Loan", "clear": "Cleared ✓", "persists": "Needs Help ⚠" }[c.status] || c.status;
+      const lastSeenDate = c.last_seen ? new Date(c.last_seen) : null;
+      const lastSeen   = lastSeenDate ? lastSeenDate.toLocaleDateString() : "just now";
+      const daysSince  = lastSeenDate ? Math.floor((nowMs - lastSeenDate.getTime()) / 86400000) : null;
+      const overdueHtml = (c.status === "on-loan" && daysSince !== null && daysSince > 7)
+        ? `<div class="overdue-flag">⚠ ${daysSince}d without clearing</div>` : "";
       const conceptSafe = escapeHtml(c.name).replace(/'/g, "\\'");
 
       const isClear    = c.status === "clear";
@@ -194,6 +211,7 @@
           <td>
             <div class="concept-name">${escapeHtml(c.name)}</div>
             <div class="concept-sub">${escapeHtml(c.subject || "General")}</div>
+            ${overdueHtml}
           </td>
           <td><span class="status-pill ${statusClass}">${statusLabel}</span></td>
           <td>

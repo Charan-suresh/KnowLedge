@@ -26,10 +26,10 @@
         <div class="loading-backend-pill">Gemma 4 · Local</div>
         {% endif %}
       </div>
-      <h1 class="loading-headline">Every student deserves a<br><em>personal Socratic tutor.</em></h1>
+      <h1 class="loading-headline">Verify understanding.<br><em>Before the exam.</em></h1>
       <p id="loadingMsg" class="loading-sub">
         {% if inference_backend == "hf_space" or demo_mode %}
-        Warming up Gemma 4 on HF Space…
+        Initialising AI tutoring modules…
         {% else %}
         Connecting to local Gemma 4…
         {% endif %}
@@ -58,7 +58,7 @@
   <div class="demo-banner" id="demoBanner">
     <div class="demo-banner-inner">
       <span class="demo-badge">DEMO</span>
-      <span>Powered by <strong>Gemma 4</strong> on Hugging Face Space · First request may take ~60 s while the model warms up</span>
+      <span>Powered by <strong>Gemma 4</strong> · Runs offline · No student data leaves the device</span>
       <a href="https://github.com/Charan-suresh/KnowLedge" target="_blank" rel="noreferrer" class="demo-banner-link">Run locally →</a>
     </div>
   </div>
@@ -71,22 +71,22 @@
           <span class="brand-mark">K</span>
           <span>
             <strong>KnowLedge</strong>
-            <small>AI Learning Debt Tracker</small>
+            <small>Knowledge Debt · Gemma 4</small>
           </span>
         </a>
 
         <nav class="nav-links">
           <a href="/ledger"   class="{% if request.url.path == '/ledger'   %}active{% endif %}">
-            <span class="nav-icon">📒</span> Ledger
-          </a>
-          <a href="/progress" class="{% if request.url.path == '/progress' %}active{% endif %}">
-            <span class="nav-icon">📈</span> Progress
+            <span class="nav-icon">◈</span> Ledger
           </a>
           <a href="/reports"  class="{% if request.url.path == '/reports'  %}active{% endif %}">
-            <span class="nav-icon">🎓</span> Reports
+            <span class="nav-icon">◎</span> Teacher View
+          </a>
+          <a href="/progress" class="{% if request.url.path == '/progress' %}active{% endif %}">
+            <span class="nav-icon">↗</span> Progress
           </a>
           <a href="/help"     class="{% if request.url.path == '/help'     %}active{% endif %}">
-            <span class="nav-icon">💡</span> Help
+            <span class="nav-icon">?</span> Help
           </a>
         </nav>
       </div>
@@ -105,6 +105,10 @@
         {% else %}
         <button class="btn btn-ghost full" type="button" onclick="openLLMModal()">Configure Ollama</button>
         {% endif %}
+        <div style="margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--teal-light);border:1px solid rgba(15,118,110,0.18);font-size:11px;color:var(--teal);font-weight:600;display:flex;align-items:center;gap:6px;line-height:1.4" title="Runs fully offline via Ollama · No API keys · No student data in the cloud">
+          <span style="font-size:14px">⬡</span>
+          <span>Works offline · No API keys · No cloud data</span>
+        </div>
 
         {% if demo_mode %}
         <a class="btn btn-accent full" href="/demo">↺ Reset Demo Data</a>
@@ -232,6 +236,36 @@
       <div class="modal-body">
         <div id="sageConversation" class="conversation"></div>
       </div>
+
+      <!-- Integrity Monitor — always visible, collapsible -->
+      <div style="border-top:1px solid var(--line);padding:10px 20px;background:var(--bg-deep)">
+        <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleIntegrityPanel()">
+          <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;display:flex;align-items:center;gap:7px">
+            <span id="integrityDot" style="width:7px;height:7px;border-radius:50%;background:#4ade80;display:inline-block;flex-shrink:0"></span>
+            Integrity Monitor · Live
+          </span>
+          <span id="integrityToggle" style="font-size:11px;color:var(--muted)">▼ Expand</span>
+        </div>
+        <div id="integrityBody" style="display:none;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+          <div style="background:var(--panel);border-radius:8px;padding:8px 12px;border:1px solid var(--line)">
+            <div style="font-size:10px;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:0.04em">Paste Detection</div>
+            <div id="ipPaste" style="font-size:14px;font-weight:700;color:#4ade80">✓ Clear</div>
+          </div>
+          <div style="background:var(--panel);border-radius:8px;padding:8px 12px;border:1px solid var(--line)">
+            <div style="font-size:10px;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:0.04em">Typing Cadence</div>
+            <div id="ipCadence" style="font-size:14px;font-weight:700;color:#4ade80">Monitoring…</div>
+          </div>
+          <div style="background:var(--panel);border-radius:8px;padding:8px 12px;border:1px solid var(--line)">
+            <div style="font-size:10px;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:0.04em">Edit Ratio</div>
+            <div id="ipEdit" style="font-size:14px;font-weight:700;color:#4ade80">—</div>
+          </div>
+          <div style="background:var(--panel);border-radius:8px;padding:8px 12px;border:1px solid var(--line)">
+            <div style="font-size:10px;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:0.04em">Response Time</div>
+            <div id="ipFirstKey" style="font-size:14px;font-weight:700;color:#4ade80">Timing…</div>
+          </div>
+        </div>
+      </div>
+
       <div class="modal-footer sage-footer">
         <input type="text" id="sageInput" placeholder="Reply in your own words…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){sendSageMessage();}">
         <button class="btn btn-primary" type="button" onclick="sendSageMessage()" id="sageSendBtn">Send</button>
@@ -594,6 +628,81 @@
       if (timerBadge) timerBadge.style.display = "none";
     }
 
+    function toggleIntegrityPanel() {
+      const body   = document.getElementById("integrityBody");
+      const toggle = document.getElementById("integrityToggle");
+      if (!body) return;
+      const isHidden = body.style.display === "none" || body.style.display === "";
+      body.style.display = isHidden ? "grid" : "none";
+      toggle.textContent = isHidden ? "▲ Collapse" : "▼ Expand";
+    }
+
+    function _updateIntegrityPanel(tf, integrityFlag) {
+      const dot     = document.getElementById("integrityDot");
+      const ipPaste = document.getElementById("ipPaste");
+      const ipCad   = document.getElementById("ipCadence");
+      const ipEdit  = document.getElementById("ipEdit");
+      const ipFK    = document.getElementById("ipFirstKey");
+      if (!dot) return;
+
+      // Paste
+      if (ipPaste) {
+        if (tf.is_paste_detected) {
+          ipPaste.textContent = "⚠ Paste detected"; ipPaste.style.color = "#ef4444";
+        } else {
+          ipPaste.textContent = "✓ Clear"; ipPaste.style.color = "#4ade80";
+        }
+      }
+
+      // Edit ratio
+      if (ipEdit) {
+        const pct = Math.round((1 - tf.edit_ratio) * 100);
+        const col = (1 - tf.edit_ratio) > 0.08 ? "#4ade80" : "#f59e0b";
+        ipEdit.textContent = pct + "% revised";
+        ipEdit.style.color = col;
+      }
+
+      // First keystroke
+      if (ipFK) {
+        const ms = tf.time_to_first_keystroke;
+        if (ms > 0) {
+          const tooFast = ms < 1500 && tf.is_complex_question;
+          ipFK.textContent = `${(ms/1000).toFixed(1)} s delay`;
+          ipFK.style.color = tooFast ? "#f59e0b" : "#4ade80";
+        } else {
+          ipFK.textContent = "Timing…"; ipFK.style.color = "#4ade80";
+        }
+      }
+
+      // Cadence variance
+      if (ipCad) {
+        const arr = tf.typing_cadence || [];
+        if (arr.length > 3) {
+          const mean = arr.reduce((s,v)=>s+v,0)/arr.length;
+          const variance = Math.round(Math.sqrt(arr.reduce((s,v)=>s+Math.pow(v-mean,2),0)/arr.length));
+          if (variance < 20) {
+            ipCad.textContent = "⚠ Uniform (σ=" + variance + "ms)"; ipCad.style.color = "#ef4444";
+          } else {
+            ipCad.textContent = "✓ Natural (σ=" + variance + "ms)"; ipCad.style.color = "#4ade80";
+          }
+        } else {
+          ipCad.textContent = "Monitoring…"; ipCad.style.color = "#4ade80";
+        }
+      }
+
+      // Overall dot
+      const flagged = tf.is_paste_detected || integrityFlag;
+      dot.style.background = flagged ? "#ef4444" : "#4ade80";
+
+      // Auto-expand if flagged
+      if (flagged) {
+        const body = document.getElementById("integrityBody");
+        const toggle = document.getElementById("integrityToggle");
+        if (body) { body.style.display = "grid"; }
+        if (toggle) { toggle.textContent = "▲ Collapse"; }
+      }
+    }
+
     function openSage(conceptId, conceptName) {
       currentSageConceptId = conceptId;
       currentSageConcept   = conceptName;
@@ -606,6 +715,17 @@
           Let's clear <strong>${conceptName}</strong>. Explain it to me in your own words — pretend I've never heard of it.
         </div>`;
       document.getElementById("sageInput").value = "";
+      // Reset integrity panel for new session
+      const ipDot = document.getElementById("integrityDot");
+      if (ipDot) { ipDot.style.background = "#4ade80"; }
+      ["ipPaste","ipCadence","ipEdit","ipFirstKey"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { el.textContent = id === "ipPaste" ? "✓ Clear" : "Timing…"; el.style.color = "#4ade80"; }
+      });
+      const ib = document.getElementById("integrityBody");
+      const it = document.getElementById("integrityToggle");
+      if (ib) ib.style.display = "none";
+      if (it) it.textContent = "▼ Expand";
       document.getElementById("sageModal").classList.add("open");
       _attachSageTelemetry();
       _resetTelemetry();
@@ -629,6 +749,7 @@
       // Capture telemetry for this turn, then reset for the next question
       const isComplex = currentSageHistory.length >= 2;
       const temporalFingerprint = _buildTemporalFingerprint(message, isComplex);
+      _updateIntegrityPanel(temporalFingerprint, false);
 
       const convo = document.getElementById("sageConversation");
       convo.insertAdjacentHTML("beforeend", `<div class="bubble bubble-student"><span class="bubble-label">You</span>${escapeHtml(message)}</div>`);
@@ -662,6 +783,7 @@
         // Show integrity badge if the server flagged unusual patterns
         if (data.integrity_flag) {
           document.getElementById("integrityBadge").style.display = "block";
+          _updateIntegrityPanel(temporalFingerprint, true);
         }
 
         convo.insertAdjacentHTML("beforeend", `<div class="bubble bubble-sage"><span class="bubble-label">Sage</span>${escapeHtml(data.reply)}</div>`);
