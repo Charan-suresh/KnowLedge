@@ -4,6 +4,196 @@
 {% block eyebrow %}Learning Analytics{% endblock %}
 {% block page_title %}Learning Progress{% endblock %}
 
+{% block head %}
+<style>
+  /* Dashboard layout */
+  .dashboard-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    margin-top: 1rem;
+  }
+  
+  /* Metric Cards */
+  .metrics-4up {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.25rem;
+  }
+  @media (max-width: 768px) {
+    .metrics-4up {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+  .metric-card {
+    background: var(--bg, #faf9f6);
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 10px;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .metric-card-label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .metric-card-value {
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .indicator-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .dot-green { background-color: #22c55e; }
+  .dot-amber { background-color: #f59e0b; }
+  .dot-red { background-color: #ef4444; }
+  .icon-flame { color: #f59e0b; font-size: 20px; }
+  .icon-flame.gray { color: #ccc; }
+
+  /* Charts Row */
+  .charts-2up {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+    gap: 1.25rem;
+  }
+  @media (max-width: 768px) {
+    .charts-2up {
+      grid-template-columns: 1fr;
+    }
+  }
+  .chart-card {
+    background: var(--bg, #faf9f6);
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 10px;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+  }
+  .chart-card-header {
+    margin-bottom: 1rem;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+    padding-bottom: 0.75rem;
+  }
+  .chart-card-header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .chart-card-body {
+    flex-grow: 1;
+    position: relative;
+    min-height: 250px;
+  }
+
+  /* Table */
+  .table-card {
+    background: var(--bg, #faf9f6);
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .table-card-header {
+    padding: 1.25rem;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+  }
+  .table-card-header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .table-wrap {
+    overflow-x: auto;
+  }
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+  .data-table th, .data-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+  }
+  .data-table th {
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+    user-select: none;
+    background: rgba(0,0,0,0.02);
+  }
+  .data-table th:hover {
+    background: rgba(0,0,0,0.04);
+  }
+  .data-table tr:nth-child(even) {
+    background: rgba(0,0,0,0.01);
+  }
+  .data-table tr:hover {
+    background: rgba(0,0,0,0.03);
+  }
+
+  /* Empty State */
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 1rem;
+    text-align: center;
+    height: 100%;
+  }
+  .empty-icon {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+    color: var(--muted);
+  }
+  .empty-msg {
+    font-size: 14px;
+    color: var(--muted);
+    margin: 0 0 1rem 0;
+  }
+  .empty-cta {
+    display: inline-block;
+    padding: 6px 12px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font-size: 13px;
+    text-decoration: none;
+    color: var(--text);
+    font-weight: 500;
+    transition: background 0.2s;
+  }
+  .empty-cta:hover {
+    background: rgba(0,0,0,0.05);
+  }
+
+  /* Status Pills */
+  .pill {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .pill-loan { background: rgba(245, 158, 11, 0.15); color: #b45309; }
+  .pill-clear { background: rgba(34, 197, 94, 0.15); color: #15803d; }
+  .pill-persists { background: rgba(239, 68, 68, 0.15); color: #b91c1c; }
+
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
 {% block content %}
 
 <section class="hero-card">
@@ -13,56 +203,309 @@
   </div>
 </section>
 
-<div class="stats-grid">
-  <div class="stat-card"><span>Debt Score</span><strong id="pDebt">—</strong></div>
-  <div class="stat-card"><span>Cleared</span><strong id="pCleared">—</strong></div>
-  <div class="stat-card"><span>Avg Days</span><strong id="pAvgDays">—</strong></div>
-  <div class="stat-card"><span>Day Streak</span><strong id="pStreak">—</strong></div>
-</div>
-
-<div class="progress-grid">
-  <section class="panel-card">
-    <div class="panel-head">
-      <div>
-        <p class="eyebrow">Comprehension</p>
-        <h3>Concept confidence</h3>
+<div class="dashboard-grid">
+  <!-- Metrics 4-up -->
+  <div class="metrics-4up">
+    <div class="metric-card">
+      <div class="metric-card-label">Debt Score</div>
+      <div class="metric-card-value" id="valDebtScore">
+        <span id="numDebtScore">—</span>
+        <span id="indDebtScore"></span>
       </div>
     </div>
-    <div id="conceptBars" class="bars-stack">
-      <p class="empty-msg">Start a Sage session to see data here.</p>
-    </div>
-  </section>
-
-  <section class="panel-card">
-    <div class="panel-head">
-      <div>
-        <p class="eyebrow">Activity Trend</p>
-        <h3>Cleared sessions — last 30 days</h3>
+    <div class="metric-card">
+      <div class="metric-card-label">Cleared</div>
+      <div class="metric-card-value" id="valCleared">
+        <span id="numCleared">—</span>
+        <span id="indCleared"></span>
       </div>
     </div>
-    <div id="debtTrend" class="trend-wrap">
-      <p class="empty-msg">Complete sessions to see your trend.</p>
+    <div class="metric-card">
+      <div class="metric-card-label">Avg Days</div>
+      <div class="metric-card-value" id="valAvgDays">
+        <span id="numAvgDays">—</span>
+        <span id="indAvgDays"></span>
+      </div>
     </div>
-  </section>
-</div>
+    <div class="metric-card">
+      <div class="metric-card-label">Day Streak</div>
+      <div class="metric-card-value" id="valStreak">
+        <span id="numStreak">—</span>
+        <span id="indStreak"></span>
+      </div>
+    </div>
+  </div>
 
-<!-- Status breakdown row -->
-<section class="panel-card">
-  <div class="panel-head">
-    <div>
-      <p class="eyebrow">Status</p>
-      <h3>All concepts at a glance</h3>
+  <!-- Charts 2-up -->
+  <div class="charts-2up">
+    <div class="chart-card">
+      <div class="chart-card-header">
+        <h3>Concept Confidence</h3>
+      </div>
+      <div class="chart-card-body" id="containerConfidence">
+        <canvas id="chartConfidence"></canvas>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-card-header">
+        <h3>Activity Trend (Last 30 Days)</h3>
+      </div>
+      <div class="chart-card-body" id="containerTrend">
+        <canvas id="chartTrend"></canvas>
+      </div>
     </div>
   </div>
-  <div id="statusPills" style="display:flex;gap:8px;flex-wrap:wrap;padding:4px 0">
-    <p class="empty-msg" style="width:100%;margin:0">No concepts tracked yet.</p>
+
+  <!-- Table -->
+  <div class="table-card">
+    <div class="table-card-header">
+      <h3>All Concepts</h3>
+    </div>
+    <div id="containerTable" class="table-wrap">
+      <table class="data-table" id="tableConcepts">
+        <thead>
+          <tr>
+            <th onclick="sortTable(0)">Concept ↕</th>
+            <th onclick="sortTable(1)">Status ↕</th>
+            <th onclick="sortTable(2)">Confidence ↕</th>
+            <th onclick="sortTable(3)">Last Seen ↕</th>
+            <th onclick="sortTable(4)">Days in Debt ↕</th>
+          </tr>
+        </thead>
+        <tbody id="tbodyConcepts">
+        </tbody>
+      </table>
+    </div>
   </div>
-</section>
+</div>
 
 {% endblock %}
 
 {% block scripts %}
 <script>
+  let rawConcepts = [];
+  let chartConfInstance = null;
+  let chartTrendInstance = null;
+
+  const emptyStateHtml = (icon, msg) => `
+    <div class="empty-state">
+      <span class="empty-icon">${icon}</span>
+      <p class="empty-msg">${msg}</p>
+      <a href="/ledger" class="empty-cta">Go to Ledger →</a>
+    </div>
+  `;
+
+  function updateMetrics(d) {
+    const formatMetric = (val, idNum, idInd, suffix = "", getInd = null) => {
+      const elNum = document.getElementById(idNum);
+      const elInd = document.getElementById(idInd);
+      if (val === undefined || val === null || val === "—" || isNaN(val) && typeof val !== 'string') {
+        elNum.textContent = "—";
+        elNum.style.color = "var(--muted)";
+        elInd.innerHTML = "";
+      } else {
+        elNum.textContent = val + suffix;
+        elNum.style.color = "var(--text)";
+        if (getInd) elInd.innerHTML = getInd(val);
+        else elInd.innerHTML = "";
+      }
+    };
+
+    formatMetric(d.debt_score, "numDebtScore", "indDebtScore", "%", v => 
+      `<span class="indicator-dot ${v > 50 ? 'dot-red' : 'dot-green'}"></span>`
+    );
+    formatMetric(d.cleared_month, "numCleared", "indCleared", "", v => 
+      `<span class="indicator-dot dot-green"></span>`
+    );
+    formatMetric(d.avg_days, "numAvgDays", "indAvgDays", " d", v => 
+      `<span class="indicator-dot ${v > 7 ? 'dot-amber' : 'dot-green'}"></span>`
+    );
+    formatMetric(d.streak, "numStreak", "indStreak", "", v => 
+      `<span class="icon-flame ${v > 0 ? '' : 'gray'}">🔥</span>`
+    );
+  }
+
+  function initConfidenceChart(concepts) {
+    const container = document.getElementById("containerConfidence");
+    if (!concepts || concepts.length === 0) {
+      container.innerHTML = emptyStateHtml("📊", "Complete a Sage session to see concept confidence.");
+      return;
+    }
+    
+    // Sort by confidence descending
+    const sorted = [...concepts].sort((a,b) => (b.confidence || 0) - (a.confidence || 0));
+    
+    const labels = sorted.map(c => c.name.length > 20 ? c.name.substring(0, 20) + "..." : c.name);
+    const data = sorted.map(c => Math.round((c.confidence || 0) * 100));
+    const colors = data.map(v => v >= 70 ? "#22c55e" : v >= 40 ? "#f59e0b" : "#ef4444");
+
+    if (chartConfInstance) chartConfInstance.destroy();
+
+    const canvas = document.createElement("canvas");
+    canvas.id = "chartConfidence";
+    container.innerHTML = "";
+    container.appendChild(canvas);
+
+    chartConfInstance = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Confidence %',
+          data: data,
+          backgroundColor: colors,
+          borderRadius: 4
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => ctx.raw + "%"
+            }
+          }
+        },
+        scales: {
+          x: {
+            beginAtZero: true,
+            max: 100,
+            grid: { display: false }
+          },
+          y: {
+            grid: { display: false }
+          }
+        }
+      }
+    });
+  }
+
+  function initTrendChart(history) {
+    const container = document.getElementById("containerTrend");
+    if (!history || history.length === 0) {
+      container.innerHTML = emptyStateHtml("📈", "Complete sessions to see your trend.");
+      return;
+    }
+
+    const labels = history.map(h => h.day.substring(5).replace("-", "/"));
+    const data = history.map(h => h.cleared_count || 0);
+
+    if (chartTrendInstance) chartTrendInstance.destroy();
+
+    const canvas = document.createElement("canvas");
+    canvas.id = "chartTrend";
+    container.innerHTML = "";
+    container.appendChild(canvas);
+
+    chartTrendInstance = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Sessions Cleared',
+          data: data,
+          backgroundColor: '#0d9488',
+          borderRadius: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: {
+              maxTicksLimit: Math.max(5, Math.floor(labels.length / 5))
+            }
+          },
+          y: {
+            beginAtZero: true,
+            ticks: { stepSize: 1 },
+            grid: { color: 'rgba(0,0,0,0.05)' }
+          }
+        }
+      }
+    });
+  }
+
+  function renderTable(concepts) {
+    const container = document.getElementById("containerTable");
+    const tbody = document.getElementById("tbodyConcepts");
+    
+    if (!concepts || concepts.length === 0) {
+      container.innerHTML = emptyStateHtml("📋", "No concepts tracked yet.");
+      return;
+    }
+
+    // Reconstruct table if it was replaced by empty state
+    if (!tbody) {
+      container.innerHTML = `
+        <table class="data-table" id="tableConcepts">
+          <thead>
+            <tr>
+              <th onclick="sortTable(0)">Concept ↕</th>
+              <th onclick="sortTable(1)">Status ↕</th>
+              <th onclick="sortTable(2)">Confidence ↕</th>
+              <th onclick="sortTable(3)">Last Seen ↕</th>
+              <th onclick="sortTable(4)">Days in Debt ↕</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyConcepts"></tbody>
+        </table>
+      `;
+    }
+    
+    const activeTbody = document.getElementById("tbodyConcepts");
+
+    activeTbody.innerHTML = concepts.map(c => {
+      const pct = Math.round((c.confidence || 0) * 100);
+      const sc = { "on-loan": "pill-loan", "clear": "pill-clear", "persists": "pill-persists" }[c.status] || "pill-loan";
+      const sl = { "on-loan": "On Loan", "clear": "Clear", "persists": "Persists" }[c.status] || c.status;
+      
+      const lastSeen = c.last_seen ? new Date(c.last_seen).toLocaleDateString() : "—";
+      const daysInDebt = c.days_in_debt !== undefined ? c.days_in_debt : "—";
+
+      return `
+        <tr>
+          <td><strong>${escapeHtml(c.name)}</strong></td>
+          <td><span class="pill ${sc}">${sl}</span></td>
+          <td>${pct}%</td>
+          <td>${lastSeen}</td>
+          <td>${daysInDebt}</td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  let sortAsc = {};
+  function sortTable(colIndex) {
+    if (!rawConcepts || rawConcepts.length === 0) return;
+    
+    sortAsc[colIndex] = !sortAsc[colIndex];
+    const asc = sortAsc[colIndex] ? 1 : -1;
+
+    rawConcepts.sort((a, b) => {
+      let valA, valB;
+      if (colIndex === 0) { valA = a.name.toLowerCase(); valB = b.name.toLowerCase(); }
+      else if (colIndex === 1) { valA = a.status; valB = b.status; }
+      else if (colIndex === 2) { valA = a.confidence || 0; valB = b.confidence || 0; }
+      else if (colIndex === 3) { valA = a.last_seen || ""; valB = b.last_seen || ""; }
+      else if (colIndex === 4) { valA = a.days_in_debt || 0; valB = b.days_in_debt || 0; }
+      
+      if (valA < valB) return -1 * asc;
+      if (valA > valB) return 1 * asc;
+      return 0;
+    });
+
+    renderTable(rawConcepts);
+  }
+
   async function loadProgress() {
     const sid = getStudentId();
     let d;
@@ -70,60 +513,20 @@
       const r = await fetch(`/api/progress/summary?student_id=${sid}`);
       if (!r.ok) throw new Error("API error");
       d = await r.json();
-    } catch (e) { return; }
-
-    document.getElementById("pDebt").textContent    = (d.debt_score ?? 0) + "%";
-    document.getElementById("pCleared").textContent = d.cleared_month ?? 0;
-    document.getElementById("pAvgDays").textContent = (d.avg_days ?? 0) + " d";
-    document.getElementById("pStreak").textContent  = (d.streak ?? 0) + " d";
-
-    // Confidence bars
-    const barsEl = document.getElementById("conceptBars");
-    if (d.concepts && d.concepts.length > 0) {
-      barsEl.innerHTML = d.concepts.map(c => {
-        const pct = Math.round((c.confidence || 0) * 100);
-        const col = pct >= 80 ? "#22c55e" : pct >= 50 ? "#f59e0b" : "#ef4444";
-        return `
-          <div class="h-row">
-            <div class="h-label">${escapeHtml(c.name)}</div>
-            <div class="h-track"><div class="h-fill" style="width:${pct}%;background:${col}"></div></div>
-            <div class="h-pct">${pct}%</div>
-          </div>`;
-      }).join("");
-    } else {
-      barsEl.innerHTML = '<p class="empty-msg">Start a Sage session to see data here.</p>';
+    } catch (e) {
+      updateMetrics({});
+      initConfidenceChart([]);
+      initTrendChart([]);
+      renderTable([]);
+      return;
     }
 
-    // Trend chart
-    const trendEl = document.getElementById("debtTrend");
-    const hist    = d.debt_history || [];
-    if (hist.length > 0) {
-      const maxVal = Math.max(...hist.map(h => h.cleared_count || 1), 1);
-      trendEl.innerHTML = hist.map(h => {
-        const height = Math.max(8, Math.round((h.cleared_count / maxVal) * 160));
-        const label  = (h.day || "").slice(5).replace("-", "/");
-        return `
-          <div class="trend-bar-wrap">
-            <div class="trend-bar" style="height:${height}px;background:linear-gradient(180deg,#0d9488,#0f766e)"
-                 title="${h.cleared_count} cleared on ${h.day}"></div>
-            <div class="trend-label">${label}</div>
-          </div>`;
-      }).join("");
-    } else {
-      trendEl.innerHTML = '<p class="empty-msg" style="align-self:center">Complete sessions to see trends.</p>';
-    }
-
-    // Status pills
-    const pillsEl = document.getElementById("statusPills");
-    if (d.concepts && d.concepts.length > 0) {
-      pillsEl.innerHTML = d.concepts.map(c => {
-        const sc = { "on-loan": "sp-loan", "clear": "sp-clear", "persists": "sp-pers" }[c.status] || "sp-loan";
-        const sl = { "on-loan": "On Loan", "clear": "Clear", "persists": "Persists" }[c.status] || c.status;
-        return `<span class="status-pill ${sc}" title="${sl}">${escapeHtml(c.name)}</span>`;
-      }).join("");
-    } else {
-      pillsEl.innerHTML = '<p class="empty-msg" style="width:100%;margin:0">No concepts tracked yet.</p>';
-    }
+    rawConcepts = d.concepts || [];
+    
+    updateMetrics(d);
+    initConfidenceChart(d.concepts);
+    initTrendChart(d.debt_history);
+    renderTable(d.concepts);
   }
 
   document.addEventListener("DOMContentLoaded", loadProgress);
