@@ -143,40 +143,20 @@
     background: rgba(0,0,0,0.03);
   }
 
-  /* Empty State */
   .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 3rem 1rem;
-    text-align: center;
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; padding: 2.5rem 1rem;
+    text-align: center; gap: 0.75rem;
     height: 100%;
   }
-  .empty-icon {
-    font-size: 2rem;
-    margin-bottom: 0.5rem;
-    color: var(--muted);
+  .es-icon { font-size: 2rem; opacity: 0.4; }
+  .es-msg { font-size: 14px; color: #888; max-width: 240px; line-height: 1.5; margin: 0; }
+  .es-cta {
+    display: inline-block; padding: 6px 16px;
+    border: 1px solid rgba(0,0,0,0.15); border-radius: 999px;
+    font-size: 13px; color: #555; text-decoration: none;
   }
-  .empty-msg {
-    font-size: 14px;
-    color: var(--muted);
-    margin: 0 0 1rem 0;
-  }
-  .empty-cta {
-    display: inline-block;
-    padding: 6px 12px;
-    border: 1px solid var(--line);
-    border-radius: 6px;
-    font-size: 13px;
-    text-decoration: none;
-    color: var(--text);
-    font-weight: 500;
-    transition: background 0.2s;
-  }
-  .empty-cta:hover {
-    background: rgba(0,0,0,0.05);
-  }
+  .es-cta:hover { background: rgba(0,0,0,0.04); }
 
   /* Status Pills */
   .pill {
@@ -196,12 +176,13 @@
 
 {% block content %}
 
-<section class="hero-card">
-  <div>
-    <p class="eyebrow">Live Summary</p>
-    <h2>Progress fills in as concepts move from debt to understanding.</h2>
-  </div>
-</section>
+<div class="status-strip" style="margin-bottom: 24px;">
+  <span class="ss-brand">K KnowLedge</span>
+  <span class="ss-status" id="model-status-strip">
+    <span class="ss-dot"></span> <span id="ssStatusText">Checking model...</span>
+  </span>
+  <a href="https://github.com/Charan-suresh/KnowLedge" class="ss-link" target="_blank">Run locally →</a>
+</div>
 
 <div class="dashboard-grid">
   <!-- Metrics 4-up -->
@@ -289,9 +270,9 @@
 
   const emptyStateHtml = (icon, msg) => `
     <div class="empty-state">
-      <span class="empty-icon">${icon}</span>
-      <p class="empty-msg">${msg}</p>
-      <a href="/ledger" class="empty-cta">Go to Ledger →</a>
+      <span class="es-icon">${icon}</span>
+      <p class="es-msg">${msg}</p>
+      <a href="/ledger" class="es-cta">Go to Ledger →</a>
     </div>
   `;
 
@@ -328,7 +309,7 @@
   function initConfidenceChart(concepts) {
     const container = document.getElementById("containerConfidence");
     if (!concepts || concepts.length === 0) {
-      container.innerHTML = emptyStateHtml("📊", "Complete a Sage session to see concept confidence.");
+      container.innerHTML = emptyStateHtml("📊", "Complete a Sage session to see confidence scores");
       return;
     }
     
@@ -386,7 +367,7 @@
   function initTrendChart(history) {
     const container = document.getElementById("containerTrend");
     if (!history || history.length === 0) {
-      container.innerHTML = emptyStateHtml("📈", "Complete sessions to see your trend.");
+      container.innerHTML = emptyStateHtml("📅", "Your cleared sessions will appear here");
       return;
     }
 
@@ -439,7 +420,7 @@
     const tbody = document.getElementById("tbodyConcepts");
     
     if (!concepts || concepts.length === 0) {
-      container.innerHTML = emptyStateHtml("📋", "No concepts tracked yet.");
+      container.innerHTML = emptyStateHtml("📒", "No concepts tracked yet — paste notes in the Ledger to get started");
       return;
     }
 

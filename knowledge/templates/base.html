@@ -8,6 +8,27 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/knowledge.css">
+  <style>
+    .status-strip {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 8px 1.5rem;
+      background: var(--warm-surface, #faf9f6);
+      border-bottom: 1px solid rgba(0,0,0,0.07);
+      font-size: 13px;
+    }
+    .ss-brand { font-weight: 600; color: var(--accent); }
+    .ss-status { display: flex; align-items: center; gap: 6px; color: #888; margin-left: auto; }
+    .ss-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: #f59e0b;
+      animation: pulse 2s infinite;
+    }
+    .ss-dot.ready { background: #22c55e; animation: none; }
+    .ss-link { font-size: 12px; color: #aaa; text-decoration: none; }
+    .ss-link:hover { color: #666; }
+  </style>
   {% block head %}{% endblock %}
 </head>
 <body>
@@ -710,20 +731,30 @@
     function updateNavStatus(data) {
       const statusText = document.getElementById("navStatusText");
       const dot        = document.getElementById("navDot");
+      const ssDots     = document.querySelectorAll(".ss-dot");
+      const ssTexts    = document.querySelectorAll("#ssStatusText");
       if (!statusText || !dot) return;
       if (data.ready) {
         const label = IS_HF_BACKEND ? "Gemma 4 · HF Space" : `Gemma 4 ready · ${data.model}`;
         statusText.textContent = label;
         dot.classList.add("ready");
+        ssDots.forEach(d => d.classList.add("ready"));
+        ssTexts.forEach(t => t.textContent = label);
       } else if (IS_HF_BACKEND && !data.ollama_running) {
         statusText.textContent = "HF Space warming up…";
         dot.classList.remove("ready");
+        ssDots.forEach(d => d.classList.remove("ready"));
+        ssTexts.forEach(t => t.textContent = "HF Space warming up…");
       } else if (!data.ollama_running) {
         statusText.textContent = "Ollama offline";
         dot.classList.remove("ready");
+        ssDots.forEach(d => d.classList.remove("ready"));
+        ssTexts.forEach(t => t.textContent = "Ollama offline");
       } else {
         statusText.textContent = "Model not found";
         dot.classList.remove("ready");
+        ssDots.forEach(d => d.classList.remove("ready"));
+        ssTexts.forEach(t => t.textContent = "Model not found");
       }
     }
 
