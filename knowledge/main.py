@@ -135,7 +135,7 @@ def reports_page(request: Request):
 
 @app.get("/help", response_class=HTMLResponse)
 def help_page(request: Request):
-    return _page_response(request, "help.html")
+    return RedirectResponse(url="/ledger")
 
 
 @app.get("/demo")

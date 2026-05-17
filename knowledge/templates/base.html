@@ -85,9 +85,6 @@
           <a href="/progress" class="{% if request.url.path == '/progress' %}active{% endif %}">
             <span class="nav-icon">↗</span> Progress
           </a>
-          <a href="/help"     class="{% if request.url.path == '/help'     %}active{% endif %}">
-            <span class="nav-icon">?</span> Help
-          </a>
         </nav>
       </div>
 
@@ -294,9 +291,236 @@
     </div>
   </div>
 
+  <!-- Help FAB and Panel -->
+  <style>
+    #help-fab {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      z-index: 900;
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: #d97706; /* warm amber */
+      color: #fff;
+      font-size: 28px;
+      font-family: inherit;
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: pulse-fab 2s 1;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    #help-fab:hover {
+      transform: scale(1.05);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+    }
+    @keyframes pulse-fab {
+      0% { box-shadow: 0 0 0 0 rgba(217, 119, 6, 0.7); }
+      70% { box-shadow: 0 0 0 15px rgba(217, 119, 6, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(217, 119, 6, 0); }
+    }
+
+    .help-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0,0,0,0.4);
+      z-index: 999;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.3s ease;
+    }
+    .help-overlay.open {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .help-panel {
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: 420px;
+      height: 100vh;
+      background: var(--bg);
+      z-index: 1000;
+      overflow-y: auto;
+      transform: translateX(100%);
+      transition: transform 0.3s ease;
+      box-shadow: -4px 0 24px rgba(0,0,0,0.15);
+      display: flex;
+      flex-direction: column;
+    }
+    @media (max-width: 480px) {
+      .help-panel { width: 100vw; }
+    }
+    .help-panel.open {
+      transform: translateX(0);
+    }
+    .help-panel-header {
+      padding: 20px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--card);
+    }
+    .help-panel-header h3 { margin: 0; font-size: 20px; font-family: 'Instrument Serif', serif; font-weight: 400; }
+    .help-panel-body {
+      padding: 24px 20px;
+      flex-grow: 1;
+    }
+    .help-panel-body section {
+      margin-bottom: 24px;
+    }
+    
+    .faq-item {
+      margin-bottom: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      overflow: hidden;
+    }
+    .faq-item summary {
+      padding: 14px 16px;
+      font-weight: 600;
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 14px;
+    }
+    .faq-item summary::-webkit-details-marker { display: none; }
+    .faq-item summary::after {
+      content: '+';
+      font-size: 18px;
+      color: var(--muted);
+    }
+    .faq-item[open] summary::after { content: '−'; }
+    .faq-item p {
+      margin: 0;
+      padding: 0 16px 16px 16px;
+      color: var(--muted);
+      line-height: 1.6;
+      font-size: 13.5px;
+    }
+  </style>
+
+  <button id="help-fab" aria-label="Help" title="Help" onclick="openHelpPanel()">?</button>
+  
+  <div class="help-overlay" id="helpOverlay" onclick="closeHelpPanel()"></div>
+  <div class="help-panel" id="helpPanel">
+    <div class="help-panel-header">
+      <h3 style="font-size: 24px;">How KnowLedge Works</h3>
+      <button class="icon-btn" type="button" onclick="closeHelpPanel()">✕</button>
+    </div>
+    <div class="help-panel-body">
+      <section class="mission-card panel-card" style="padding: 20px;">
+        <p class="eyebrow" style="color:rgba(240,232,216,0.45)">The Problem</p>
+        <h3 style="font-size:18px;line-height:1.4">Every student deserves a Socratic tutor — not just the privileged few.</h3>
+        <p style="font-size:14px;margin-top:8px">Research shows that Socratic questioning — being pushed to explain your reasoning rather than just recall facts — produces durable understanding. But access to that kind of rigorous one-on-one tutoring is expensive and scarce. KnowLedge changes that using Gemma 4.</p>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px">
+          <span class="mission-tag" style="font-size:12px">🤗 unsloth/gemma-4-4b-it</span>
+          <span class="mission-tag" style="font-size:12px">📖 100% Open Source</span>
+        </div>
+      </section>
+
+      <section>
+        <p class="eyebrow">The Four Agents</p>
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          <div class="panel-card" style="padding:16px">
+            <h4 style="font-family:'Instrument Serif',serif;font-weight:400;font-size:22px;margin:0 0 6px">Scout</h4>
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:8px">Concept Extractor</div>
+            <p style="color:var(--muted);font-size:13px;line-height:1.6;margin:0">Paste any study content — textbook excerpts, lecture notes, your own summaries. Scout sends it to Gemma 4 and extracts 3–8 key concepts you need to understand.</p>
+          </div>
+          <div class="panel-card" style="padding:16px">
+            <h4 style="font-family:'Instrument Serif',serif;font-weight:400;font-size:22px;margin:0 0 6px">Sage</h4>
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:8px">Socratic Tutor</div>
+            <p style="color:var(--muted);font-size:13px;line-height:1.6;margin:0">Click "Sage →" on any concept. Gemma 4 takes on the role of a Socratic tutor — it never gives you the answer directly. It asks escalating questions until your explanations demonstrate genuine mastery.</p>
+          </div>
+          <div class="panel-card" style="padding:16px">
+            <h4 style="font-family:'Instrument Serif',serif;font-weight:400;font-size:22px;margin:0 0 6px">Lens</h4>
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:8px">Vision Verifier</div>
+            <p style="color:var(--muted);font-size:13px;line-height:1.6;margin:0">Photo of handwritten notes? Drop it in Lens. Gemma 4 vision analyses whether your reasoning is genuine, identifies which tracked concepts are present, and flags gaps or misconceptions.</p>
+          </div>
+          <div class="panel-card" style="padding:16px">
+            <h4 style="font-family:'Instrument Serif',serif;font-weight:400;font-size:22px;margin:0 0 6px">Solo Mode</h4>
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:8px">Timed Recall Test</div>
+            <p style="color:var(--muted);font-size:13px;line-height:1.6;margin:0">The gold standard of durable learning. Click "Solo" on any concept and explain it from memory without any prompting. Gemma 4 scores your answer strictly.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel-card prose-card" style="padding:16px">
+        <p class="eyebrow">Integrity System</p>
+        <h4 style="font-size:16px;margin:0 0 8px">Hard to game by design.</h4>
+        <p style="font-size:13px;color:var(--muted);line-height:1.6;margin:0">Every Sage session generates a signed cryptographic fingerprint tracking typing rhythm, paste events, response timing, and turn-by-turn entropy. If a session looks suspicious it gets flagged as "Persists" and redirected to Solo Mode.</p>
+      </section>
+
+      <section class="panel-card prose-card" style="padding:16px">
+        <p class="eyebrow">Local Setup</p>
+        <h4 style="font-size:16px;margin:0 0 8px">Run everything locally.</h4>
+        <ol class="help-list" style="font-size:12.5px;margin:0;padding-left:18px;color:var(--muted)">
+          <li>Clone: <code>git clone https://github.com/Charan-suresh/KnowLedge.git</code></li>
+          <li>Install: <code>pip install -r requirements.txt</code></li>
+          <li>Pull model: <code>ollama pull gemma4:e4b</code></li>
+          <li>Start Ollama: <code>ollama serve</code></li>
+          <li>Start app: <code>uvicorn knowledge.main:app --reload</code></li>
+        </ol>
+      </section>
+
+      <section>
+        <p class="eyebrow">Frequently Asked Questions</p>
+        <details class="faq-item">
+          <summary>Why is my first request slow?</summary>
+          <p>Cold start on HF Space, ~60s.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Does my data leave my device?</summary>
+          <p>No, SQLite is local; HF Space only receives the text you submit.</p>
+        </details>
+        <details class="faq-item">
+          <summary>What is comprehension debt?</summary>
+          <p>AI-assisted confidence that collapses under offline exam conditions.</p>
+        </details>
+        <details class="faq-item">
+          <summary>How do I run this locally?</summary>
+          <p>Link to GitHub + ollama steps.</p>
+        </details>
+        <details class="faq-item">
+          <summary>What does 'Persists' mean on a concept?</summary>
+          <p>Flagged by integrity system, needs Solo verification.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Can my teacher see my ledger?</summary>
+          <p>Only if you export via Reports tab.</p>
+        </details>
+      </section>
+    </div>
+  </div>
+
   <div id="toastHost" class="toast-host"></div>
 
   <script>
+    // ── Help Panel JS ────────────────────────────────────────────────────────
+    function openHelpPanel() {
+      document.getElementById('helpOverlay').classList.add('open');
+      document.getElementById('helpPanel').classList.add('open');
+    }
+    function closeHelpPanel() {
+      document.getElementById('helpOverlay').classList.remove('open');
+      document.getElementById('helpPanel').classList.remove('open');
+    }
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') closeHelpPanel();
+    });
+
     // ── Constants ────────────────────────────────────────────────────────────
     const DEFAULT_OLLAMA_URL   = {{ default_ollama_url|tojson }};
     const INFERENCE_BACKEND    = {{ inference_backend|tojson }};
