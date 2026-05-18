@@ -4,7 +4,7 @@
 
 **Every student deserves a personal Socratic tutor — not just those who can afford one.**
 
-</div>
+![KnowLedge Ledger Screenshot](./screenshot.png)
 
 ---
 
@@ -217,6 +217,42 @@ Individual student names, conversation transcripts, and session content are neve
 | Single-mode text interface | Multimodal: text + handwritten image analysis |
 | No integrity verification | Anti-spoof, cadence analysis, session fingerprinting |
 | One AI role (Q&A) | Four distinct AI roles with tightly scoped prompts |
+
+---
+
+## Running Offline Locally
+
+KnowLedge is designed to run completely offline, preserving privacy and working without any internet connection. Here is how to set it up:
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/Charan-suresh/KnowLedge.git
+   cd KnowLedge
+   ```
+
+2. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Install Ollama and pull the Gemma 4 model:**
+   - Download Ollama from [ollama.com](https://ollama.com)
+   - Pull the model (requires ~3.2 GB):
+     ```bash
+     ollama pull gemma4:e4b
+     ```
+
+4. **Start the Ollama server (in a separate terminal):**
+   ```bash
+   ollama serve
+   ```
+
+5. **Start the KnowLedge app:**
+   ```bash
+   uvicorn knowledge.main:app --reload
+   ```
+
+6. Open your browser and navigate to `http://127.0.0.1:8000/ledger`.
 
 
 
