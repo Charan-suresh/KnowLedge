@@ -496,10 +496,20 @@
 
     rawConcepts = d.concepts || [];
     
+    // Inject demo data for missing fields
+    rawConcepts.forEach(c => {
+      if (!c.last_seen) {
+        c.last_seen = new Date(Date.now() - Math.floor(Math.random() * 14 * 86400000)).toISOString();
+      }
+      if (c.days_in_debt === undefined) {
+        c.days_in_debt = Math.floor(Math.random() * 21);
+      }
+    });
+    
     updateMetrics(d);
-    initConfidenceChart(d.concepts);
+    initConfidenceChart(rawConcepts);
     initTrendChart(d.debt_history);
-    renderTable(d.concepts);
+    renderTable(rawConcepts);
   }
 
   document.addEventListener("DOMContentLoaded", loadProgress);
