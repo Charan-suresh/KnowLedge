@@ -115,14 +115,7 @@
           <span id="navStatusText">Checking model…</span>
         </div>
 
-        {% if inference_backend == "hf_space" or demo_mode %}
-        <div class="backend-chip">
-          <span class="backend-icon">🤗</span>
-          <span>Gemma 4 · HF Space</span>
-        </div>
-        {% else %}
-        <button class="btn btn-ghost full" type="button" onclick="openLLMModal()">Configure Ollama</button>
-        {% endif %}
+
         <div style="margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--teal-light);border:1px solid rgba(15,118,110,0.18);font-size:11px;color:var(--teal);font-weight:600;display:flex;align-items:center;gap:6px;line-height:1.4" title="Runs fully offline via Ollama · No API keys · No student data in the cloud">
           <span style="font-size:14px">⬡</span>
           <span>Works offline · No API keys · No cloud data</span>
