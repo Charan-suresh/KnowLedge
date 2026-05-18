@@ -5,18 +5,6 @@
 {% block page_title %}
 <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
   Learning Report
-  <div style="display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:4px 10px;border-radius:12px;background:var(--bg-deep);border:1px solid var(--line);font-weight:500;color:var(--ink);">
-    <span>👤</span> <span id="headerStudentBadge">{{ student_id }}</span>
-  </div>
-  {% if inference_backend == "hf_space" or demo_mode %}
-  <div style="display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:4px 10px;border-radius:12px;background:var(--teal-light);border:1px solid rgba(15,118,110,0.2);color:var(--teal);font-weight:500;">
-    <span>🤗</span> Gemma 4
-  </div>
-  {% else %}
-  <div style="display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:4px 10px;border-radius:12px;background:var(--bg-deep);border:1px solid var(--line);font-weight:500;">
-    <span>⚙</span> Ollama
-  </div>
-  {% endif %}
 </div>
 {% endblock %}
 
@@ -101,7 +89,7 @@
 
 {% block content %}
 
-<div class="view-toggle" style="display:flex;gap:16px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:4px;margin-bottom:24px;width:fit-content">
+<div class="view-toggle" style="display:flex;gap:32px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:4px;margin-bottom:24px;width:fit-content">
   <button id="btnInstructorView" class="btn btn-ghost" style="background:var(--bg);color:var(--text);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,0.1)" onclick="switchView('instructor')">Teacher View</button>
   <button id="btnStudentView" class="btn btn-ghost" style="color:var(--muted)" onclick="switchView('student')">Student View</button>
 </div>

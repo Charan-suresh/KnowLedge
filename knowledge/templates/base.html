@@ -141,17 +141,6 @@
           <h1>{% block page_title %}KnowLedge{% endblock %}</h1>
         </div>
         <div class="topbar-actions">
-          <div class="student-chip">
-            <span class="student-icon">👤</span>
-            <span id="studentBadge">{{ student_id }}</span>
-          </div>
-          {% if inference_backend == "hf_space" or demo_mode %}
-          <button class="btn btn-primary" type="button" onclick="openInfoModal()">
-            <span>🤗 Gemma 4</span>
-          </button>
-          {% else %}
-          <button class="btn btn-primary" type="button" onclick="openLLMModal()">⚙ Ollama</button>
-          {% endif %}
         </div>
       </header>
 
